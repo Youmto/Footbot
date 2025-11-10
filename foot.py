@@ -15,6 +15,8 @@ from typing import List, Dict, Optional, Tuple
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+import signal
+import sys
 
 # ============================================================================
 # ⚙️ CONFIGURATION
@@ -27,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Bot Configuration
-BOT_TOKEN = "8528649034:AAFCz7vV3-YDPq0UVlgkBws-5zG8EQ13vCs"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8528649034:AAFCz7vV3-YDPq0UVlgkBws-5zG8EQ13vCs")
 ADMIN_IDS = [5854095196]
 CHANNEL_ID = -1002415523895
 REQUIRED_CHANNEL = "https://t.me/+mh1Ps_HZdQkzYjk0"
@@ -130,8 +132,13 @@ MAX_RETRIES = 3
 TIMEOUT = 25
 REQUEST_DELAY = 0.5
 
+# Variables globales pour la gestion propre
+background_tasks = set()
+http_server = None
+shutdown_event = asyncio.Event()
+
 # ============================================================================
-# 📦 DATA MANAGER
+# 📦 DATA MANAGER (identique)
 # ============================================================================
 
 class DataManager:
@@ -193,7 +200,6 @@ class DataManager:
     
     @staticmethod
     def load_users() -> Dict:
-        """Charge les données utilisateurs"""
         if os.path.exists(USERS_FILE):
             try:
                 with open(USERS_FILE, 'r', encoding='utf-8') as f:
@@ -204,7 +210,6 @@ class DataManager:
     
     @staticmethod
     def save_users(users: Dict):
-        """Sauvegarde les données utilisateurs"""
         try:
             with open(USERS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(users, f, indent=2)
@@ -213,7 +218,6 @@ class DataManager:
     
     @staticmethod
     def register_user(user_id: int, username: str = None, first_name: str = None):
-        """Enregistre ou met à jour un utilisateur"""
         users = DataManager.load_users()
         user_key = str(user_id)
         
@@ -260,7 +264,7 @@ class DataManager:
             logger.error(f"❌ Erreur cache: {e}")
 
 # ============================================================================
-# 🕷️ VIPROW ULTRA SCRAPER PRO
+# 🕷️ VIPROW ULTRA SCRAPER (identique, juste corrections mineures)
 # ============================================================================
 
 class VIPRowUltraScraper:
@@ -286,7 +290,7 @@ class VIPRowUltraScraper:
         timeout = aiohttp.ClientTimeout(total=TIMEOUT, connect=10)
         
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
             'Connection': 'keep-alive',
@@ -305,7 +309,6 @@ class VIPRowUltraScraper:
             await asyncio.sleep(0.5)
     
     async def fetch_page(self, url: str, retries: int = MAX_RETRIES) -> Optional[str]:
-        """Récupération robuste avec retry"""
         self.stats['total_requests'] += 1
         
         for attempt in range(retries):
@@ -314,8 +317,7 @@ class VIPRowUltraScraper:
                 
                 async with self.session.get(url, ssl=False, allow_redirects=True) as response:
                     if response.status == 200:
-                        html = await response.text()
-                        return html
+                        return await response.text()
                     elif response.status == 404:
                         logger.warning(f"⚠️ 404: {url}")
                         return None
@@ -333,13 +335,10 @@ class VIPRowUltraScraper:
     
     @staticmethod
     def clean_text(text: str) -> str:
-        """Nettoie le texte"""
-        text = re.sub(r'\s+', ' ', text.strip())
-        return text
+        return re.sub(r'\s+', ' ', text.strip())
     
     @staticmethod
     def extract_match_info(title: str) -> Dict[str, str]:
-        """Extrait équipes et heure du titre"""
         title = VIPRowUltraScraper.clean_text(title)
         
         time_match = re.search(r'(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?)', title)
@@ -372,7 +371,6 @@ class VIPRowUltraScraper:
         }
     
     async def parse_sport_page(self, html: str, sport_key: str, sport_url: str) -> List[Dict]:
-        """Parse la page sport VIPRow"""
         soup = BeautifulSoup(html, 'html.parser')
         sport_info = SPORTS_CONFIGURATION[sport_key]
         matches = []
@@ -386,24 +384,17 @@ class VIPRowUltraScraper:
                 if not href or href.startswith('#') or href.startswith('javascript:'):
                     continue
                 
-                if href.startswith('http'):
-                    match_url = href
-                else:
-                    match_url = urljoin(sport_url, href)
+                match_url = href if href.startswith('http') else urljoin(sport_url, href)
                 
                 if not any(x in match_url.lower() for x in ['viprow.nu', 'stream', 'watch', 'live']):
                     continue
                 
-                if match_url in seen:
-                    continue
-                
-                if any(x in match_url.lower() for x in ['/sports-', 'schedule', 'contact', 'about']):
+                if match_url in seen or any(x in match_url.lower() for x in ['/sports-', 'schedule', 'contact', 'about']):
                     continue
                 
                 seen.add(match_url)
                 
                 link_text = link.get_text(strip=True)
-                
                 if not link_text or len(link_text) < 5:
                     parent = link.find_parent(['div', 'td', 'li', 'tr', 'span'])
                     if parent:
@@ -440,14 +431,13 @@ class VIPRowUltraScraper:
                 
                 matches.append(match_data)
                 
-            except Exception as e:
+            except Exception:
                 continue
         
         logger.info(f"✅ {sport_info['name']}: {len(matches)} événements")
         return matches
     
     async def extract_stream_urls(self, match_url: str, match_id: str) -> Tuple[Optional[str], List[str]]:
-        """Extrait les URLs de stream"""
         cache_key = f"stream_{match_id}"
         if cache_key in self.cache:
             cached = self.cache[cache_key]
@@ -473,7 +463,6 @@ class VIPRowUltraScraper:
                     
                     if not iframe_url:
                         iframe_url = src
-                    
                     stream_urls.append(src)
             
             self.cache[cache_key] = {
@@ -484,7 +473,6 @@ class VIPRowUltraScraper:
             DataManager.save_cache(self.cache)
             
             self.stats['streams_found'] += len(stream_urls)
-            
             return iframe_url, stream_urls
             
         except Exception as e:
@@ -493,27 +481,21 @@ class VIPRowUltraScraper:
     
     @staticmethod
     def _is_valid_stream_url(url: str) -> bool:
-        """Vérifie si URL est valide"""
         if not url or len(url) < 10:
             return False
         
         blocked = ['facebook', 'twitter', 'ads', 'doubleclick', 'analytics']
-        url_lower = url.lower()
-        if any(block in url_lower for block in blocked):
+        if any(block in url.lower() for block in blocked):
             return False
         
         valid = ['embed', 'player', 'stream', 'watch', 'live', '.m3u8', '.mp4']
-        return any(v in url_lower for v in valid)
+        return any(v in url.lower() for v in valid)
     
     async def scrape_all_sports(self) -> int:
-        """Scrape TOUS les sports"""
         logger.info("🚀 Scraping multi-sports VIPRow...")
         start = time.time()
         
-        tasks = []
-        for sport_key, config in SPORTS_CONFIGURATION.items():
-            tasks.append(self.scrape_sport(sport_key, config['url']))
-        
+        tasks = [self.scrape_sport(k, c['url']) for k, c in SPORTS_CONFIGURATION.items()]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         all_matches = []
@@ -528,8 +510,7 @@ class VIPRowUltraScraper:
             elif isinstance(result, Exception):
                 logger.error(f"❌ Erreur: {result}")
         
-        unique = {m['id']: m for m in all_matches}
-        final_matches = list(unique.values())
+        final_matches = list({m['id']: m for m in all_matches}.values())
         
         data = DataManager.load_data()
         data['matches'] = final_matches
@@ -539,32 +520,22 @@ class VIPRowUltraScraper:
         DataManager.save_data(data)
         
         elapsed = time.time() - start
-        
-        logger.info("=" * 60)
-        logger.info(f"✅ SCRAPING TERMINÉ en {elapsed:.1f}s")
-        logger.info(f"📊 {len(final_matches)} événements détectés")
-        logger.info("=" * 60)
+        logger.info(f"✅ SCRAPING TERMINÉ en {elapsed:.1f}s - {len(final_matches)} événements")
         
         return len(final_matches)
     
     async def scrape_sport(self, sport_key: str, url: str) -> List[Dict]:
-        """Scrape un sport"""
         config = SPORTS_CONFIGURATION[sport_key]
         logger.info(f"📡 Scraping {config['name']}")
         
         html = await self.fetch_page(url)
-        if not html:
-            return []
-        
-        matches = await self.parse_sport_page(html, sport_key, url)
-        return matches
+        return await self.parse_sport_page(html, sport_key, url) if html else []
 
 # ============================================================================
-# 🤖 TELEGRAM HANDLERS
+# 🤖 TELEGRAM HANDLERS (identiques, code inchangé)
 # ============================================================================
 
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Vérifie l'abonnement"""
     try:
         await asyncio.sleep(0.3)
         member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -574,13 +545,10 @@ async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
         return False
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Commande /start"""
     user = update.effective_user
     user_id = user.id
     
-    # Enregistrer l'utilisateur
     DataManager.register_user(user_id, user.username, user.first_name)
-    
     logger.info(f"👤 {user_id} ({user.username or user.first_name}) => /start")
     
     is_sub = await check_subscription(user_id, context)
@@ -609,26 +577,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         await update.message.reply_text(
-            msg,
-            parse_mode='HTML',
+            msg, parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await show_main_menu(update, context)
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Menu principal"""
     data = DataManager.load_data()
     sports_count = data.get('sports_count', {})
     total = len(data.get('matches', []))
     user_id = update.effective_user.id
     
-    # Enregistrer la visite
     DataManager.register_user(user_id, update.effective_user.username, update.effective_user.first_name)
     
     keyboard = []
-    
     sports_items = list(SPORTS_CONFIGURATION.items())
+    
     for i in range(0, len(sports_items), 2):
         row = []
         for j in range(2):
@@ -678,7 +643,6 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def show_sport_matches(query, sport_key: str):
-    """Affiche les matchs d'un sport"""
     await query.answer()
     
     data = DataManager.load_data()
@@ -709,11 +673,7 @@ async def show_sport_matches(query, sport_key: str):
         is_fav = match['id'] in user_favs
         icon = "⭐" if is_fav else config['icon']
         
-        if match['team2']:
-            text = f"{icon} {match['team1']} vs {match['team2']}"
-        else:
-            text = f"{icon} {match['title'][:50]}"
-        
+        text = f"{icon} {match['team1']} vs {match['team2']}" if match['team2'] else f"{icon} {match['title'][:50]}"
         keyboard.append([InlineKeyboardButton(text, callback_data=f"watch_{match['id']}")])
     
     keyboard.append([
@@ -734,7 +694,6 @@ async def show_sport_matches(query, sport_key: str):
     )
 
 async def watch_match(query, match_id: str):
-    """Options de visionnage"""
     await query.answer("⏳ Chargement...")
     
     data = DataManager.load_data()
@@ -821,7 +780,6 @@ async def watch_match(query, match_id: str):
     )
 
 async def embed_stream(query, match_id: str):
-    """Lecteur intégré Telegram"""
     await query.answer("🎬 Chargement...")
     
     data = DataManager.load_data()
@@ -896,7 +854,6 @@ async def embed_stream(query, match_id: str):
         )
 
 async def show_stream_options(query, match_id: str):
-    """Options de qualité"""
     await query.answer()
     
     data = DataManager.load_data()
@@ -945,7 +902,6 @@ async def show_stream_options(query, match_id: str):
     )
 
 async def toggle_favorite(query, match_id: str):
-    """Toggle favoris"""
     user_id = str(query.from_user.id)
     
     favorites = DataManager.load_favorites()
@@ -964,7 +920,6 @@ async def toggle_favorite(query, match_id: str):
     await watch_match(query, match_id)
 
 async def show_favorites(query):
-    """Affiche favoris"""
     await query.answer()
     
     user_id = str(query.from_user.id)
@@ -998,10 +953,7 @@ async def show_favorites(query):
     
     keyboard = []
     for match in fav_matches[:25]:
-        if match['team2']:
-            text = f"⭐ {match['team1']} vs {match['team2']}"
-        else:
-            text = f"⭐ {match['title'][:45]}"
+        text = f"⭐ {match['team1']} vs {match['team2']}" if match['team2'] else f"⭐ {match['title'][:45]}"
         keyboard.append([InlineKeyboardButton(text, callback_data=f"watch_{match['id']}")])
     
     keyboard.append([InlineKeyboardButton("🔙 Menu", callback_data="main_menu")])
@@ -1018,7 +970,6 @@ async def show_favorites(query):
     )
 
 async def refresh_all(query):
-    """Actualisation complète"""
     await query.answer("🔄 Actualisation...")
     
     await query.edit_message_text(
@@ -1052,7 +1003,6 @@ async def refresh_all(query):
         )
 
 async def admin_panel(query):
-    """Panel admin"""
     if query.from_user.id not in ADMIN_IDS:
         await query.answer("❌ Accès refusé", show_alert=True)
         return
@@ -1088,7 +1038,6 @@ async def admin_panel(query):
     )
 
 async def admin_stats(query):
-    """Stats détaillées"""
     if query.from_user.id not in ADMIN_IDS:
         await query.answer("❌ Accès refusé", show_alert=True)
         return
@@ -1117,7 +1066,6 @@ async def admin_stats(query):
         f"📅 <b>Derniers utilisateurs:</b>\n"
     )
     
-    # Liste des 5 derniers utilisateurs
     sorted_users = sorted(
         users.values(),
         key=lambda x: x.get('last_seen', ''),
@@ -1138,7 +1086,6 @@ async def admin_stats(query):
     )
 
 async def admin_reset(query):
-    """Reset données"""
     if query.from_user.id not in ADMIN_IDS:
         await query.answer("❌ Accès refusé", show_alert=True)
         return
@@ -1157,7 +1104,6 @@ async def admin_reset(query):
     )
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Router callbacks"""
     query = update.callback_query
     data = query.data
     user_id = query.from_user.id
@@ -1174,7 +1120,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_sub = await check_subscription(user_id, context)
         if is_sub:
             await query.answer("✅ Accès autorisé !")
-            # FIX: Passer l'objet Update complet
             await show_main_menu(update, context)
         else:
             await query.answer("❌ Rejoignez le canal", show_alert=True)
@@ -1221,96 +1166,203 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await toggle_favorite(query, match_id)
 
 # ============================================================================
-# 🔄 TÂCHES AUTO
+# 🔄 TÂCHES AUTO AVEC GESTION PROPRE
 # ============================================================================
 
 async def auto_update_loop(application):
-    """MAJ auto 10 min"""
-    await asyncio.sleep(60)
+    """MAJ auto toutes les 10 min avec gestion d'erreurs robuste"""
+    await asyncio.sleep(60)  # Délai initial
     
-    while True:
+    while not shutdown_event.is_set():
         try:
-            logger.info("🔄 MAJ auto...")
+            logger.info("🔄 MAJ auto programmée...")
             async with VIPRowUltraScraper() as scraper:
                 count = await scraper.scrape_all_sports()
-            logger.info(f"✅ MAJ: {count} événements")
+            logger.info(f"✅ MAJ terminée: {count} événements")
+        except asyncio.CancelledError:
+            logger.info("⏹️ Tâche auto_update annulée")
+            break
         except Exception as e:
-            logger.error(f"❌ Erreur MAJ: {e}")
+            logger.error(f"❌ Erreur MAJ auto: {e}")
         
-        await asyncio.sleep(600)
+        try:
+            await asyncio.wait_for(shutdown_event.wait(), timeout=600)  # 10 min
+            break
+        except asyncio.TimeoutError:
+            continue
 
 async def daily_reset_loop(application):
-    """Reset quotidien minuit"""
-    while True:
-        now = datetime.now()
-        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        seconds = (tomorrow - now).total_seconds()
-        
-        logger.info(f"⏰ Prochain reset: {seconds/3600:.1f}h")
-        await asyncio.sleep(seconds)
-        
-        logger.info("🌙 Reset quotidien...")
-        DataManager._create_fresh_data()
-        logger.info("✅ Reset terminé !")
+    """Reset quotidien à minuit avec gestion propre"""
+    while not shutdown_event.is_set():
+        try:
+            now = datetime.now()
+            tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            seconds = (tomorrow - now).total_seconds()
+            
+            logger.info(f"⏰ Prochain reset dans {seconds/3600:.1f}h")
+            
+            try:
+                await asyncio.wait_for(shutdown_event.wait(), timeout=seconds)
+                break
+            except asyncio.TimeoutError:
+                logger.info("🌙 Exécution reset quotidien...")
+                DataManager._create_fresh_data()
+                logger.info("✅ Reset terminé !")
+        except asyncio.CancelledError:
+            logger.info("⏹️ Tâche daily_reset annulée")
+            break
+        except Exception as e:
+            logger.error(f"❌ Erreur reset: {e}")
+            await asyncio.sleep(3600)  # Retry dans 1h en cas d'erreur
 
-async def post_init(application):
-    """Init tâches"""
-    asyncio.create_task(auto_update_loop(application))
-    asyncio.create_task(daily_reset_loop(application))
+async def post_init(application: Application):
+    """Initialisation avec gestion propre des tâches"""
+    logger.info("🚀 Initialisation des tâches de fond...")
+    
+    # Créer les tâches
+    task1 = asyncio.create_task(auto_update_loop(application), name="auto_update")
+    task2 = asyncio.create_task(daily_reset_loop(application), name="daily_reset")
+    
+    # Stocker les tâches
+    background_tasks.add(task1)
+    background_tasks.add(task2)
+    
+    # Retirer automatiquement quand terminées
+    task1.add_done_callback(background_tasks.discard)
+    task2.add_done_callback(background_tasks.discard)
+    
+    logger.info("✅ Tâches de fond démarrées")
 
+async def post_shutdown(application: Application):
+    """Arrêt propre de toutes les tâches"""
+    logger.info("🛑 Arrêt des tâches de fond...")
+    
+    # Signaler l'arrêt
+    shutdown_event.set()
+    
+    # Annuler toutes les tâches
+    for task in background_tasks:
+        if not task.done():
+            task.cancel()
+    
+    # Attendre la fin de toutes les tâches
+    if background_tasks:
+        await asyncio.gather(*background_tasks, return_exceptions=True)
+    
+    logger.info("✅ Toutes les tâches arrêtées proprement")
 
 # ============================================================================
-# 🚀 MAIN
+# 🌐 SERVEUR HTTP SIMPLE POUR RENDER
 # ============================================================================
 
 class SimpleHandler(BaseHTTPRequestHandler):
+    """Handler HTTP minimaliste pour health checks Render"""
+    
     def do_GET(self):
         self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
         self.end_headers()
-        self.wfile.write(b'OK')
+        self.wfile.write(b'Bot Running OK')
     
     def log_message(self, format, *args):
-        pass  # Suppress HTTP logs
+        pass  # Supprimer les logs HTTP
+
+def start_http_server():
+    """Démarre le serveur HTTP dans un thread"""
+    global http_server
+    port = int(os.environ.get('PORT', 8080))
+    
+    try:
+        http_server = HTTPServer(('0.0.0.0', port), SimpleHandler)
+        logger.info(f"🌐 Serveur HTTP démarré sur port {port}")
+        http_server.serve_forever()
+    except Exception as e:
+        logger.error(f"❌ Erreur serveur HTTP: {e}")
+
+def stop_http_server():
+    """Arrête le serveur HTTP proprement"""
+    global http_server
+    if http_server:
+        logger.info("🛑 Arrêt du serveur HTTP...")
+        http_server.shutdown()
+        logger.info("✅ Serveur HTTP arrêté")
+
+# ============================================================================
+# 🚀 MAIN AVEC GESTION COMPLÈTE
+# ============================================================================
+
+def signal_handler(signum, frame):
+    """Gestionnaire de signaux pour arrêt propre"""
+    logger.info(f"⚠️ Signal {signum} reçu, arrêt en cours...")
+    stop_http_server()
+    sys.exit(0)
 
 def main():
-    """Point d'entrée"""
+    """Point d'entrée principal avec gestion complète"""
     logger.info("=" * 80)
-    logger.info("🚀 VIPROW ULTIMATE PRO BOT")
+    logger.info("🚀 VIPROW ULTIMATE PRO BOT - PRODUCTION READY")
     logger.info("=" * 80)
     
-    # Start simple HTTP server on port (for Render)
-    port = int(os.environ.get('PORT', 8080))
-    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    logger.info(f"Port {port} bound")
-
-    application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    # Configuration des signaux pour arrêt propre
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
+    # Démarrer le serveur HTTP dans un thread séparé
+    http_thread = threading.Thread(target=start_http_server, daemon=True, name="HTTPServer")
+    http_thread.start()
+    logger.info("✅ Thread HTTP démarré")
+    
+    # Construction de l'application avec hooks
+    application = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
+    
+    # Enregistrement des handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(callback_handler))
     
     logger.info("")
-    logger.info("✅ BOT DÉMARRÉ !")
+    logger.info("✅ BOT CONFIGURÉ AVEC SUCCÈS")
     logger.info("")
     logger.info("📊 FONCTIONNALITÉS:")
     logger.info("   ✅ Scraping 16 sports VIPRow")
     logger.info("   ✅ Visionnage DIRECT Telegram")
     logger.info("   ✅ Extraction auto streams")
-    logger.info("   ✅ Multi-qualité")
-    logger.info("   ✅ Favoris utilisateur")
+    logger.info("   ✅ Multi-qualité HD")
+    logger.info("   ✅ Favoris utilisateurs")
     logger.info("   ✅ MAJ auto 10 min")
     logger.info("   ✅ Reset quotidien minuit")
     logger.info("   ✅ Tracking utilisateurs")
     logger.info("   ✅ Panel admin complet")
+    logger.info("   ✅ Serveur HTTP pour Render")
+    logger.info("   ✅ Gestion propre des tâches")
     logger.info("")
-    logger.info("🌐 SPORTS:")
+    logger.info("🌐 SPORTS DISPONIBLES:")
     for key, config in SPORTS_CONFIGURATION.items():
         logger.info(f"   {config['icon']} {config['name']}")
     logger.info("")
     logger.info("=" * 80)
+    logger.info("🎯 Démarrage du polling...")
+    logger.info("=" * 80)
     
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        # Lancer le bot avec polling
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            close_loop=False
+        )
+    except KeyboardInterrupt:
+        logger.info("⚠️ Arrêt demandé par l'utilisateur")
+    except Exception as e:
+        logger.error(f"❌ Erreur fatale: {e}")
+    finally:
+        stop_http_server()
+        logger.info("👋 Bot arrêté proprement")
 
 if __name__ == '__main__':
     main()
