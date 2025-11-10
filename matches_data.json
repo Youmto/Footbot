@@ -1,0 +1,1205 @@
+{
+  "matches": [
+    {
+      "id": "7090d1861d96",
+      "title": "VIPRow Sports",
+      "team1": "VIPRow Sports",
+      "team2": "",
+      "sport": "UFC",
+      "sport_icon": "🥊",
+      "sport_name": "UFC",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:21.142642"
+    },
+    {
+      "id": "07ae518d6f96",
+      "title": "Baseball",
+      "team1": "Baseball",
+      "team2": "",
+      "sport": "UFC",
+      "sport_icon": "🥊",
+      "sport_name": "UFC",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://mlbstreams.me",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:21.142642"
+    },
+    {
+      "id": "d375c9ad0acd",
+      "title": "Cricket",
+      "team1": "Cricket",
+      "team2": "",
+      "sport": "UFC",
+      "sport_icon": "🥊",
+      "sport_name": "UFC",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://cricwatch.io",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:21.142642"
+    },
+    {
+      "id": "e62c927b2ace",
+      "title": "Privacy Policy",
+      "team1": "Privacy Policy",
+      "team2": "",
+      "sport": "UFC",
+      "sport_icon": "🥊",
+      "sport_name": "UFC",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/privacy-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:21.142642"
+    },
+    {
+      "id": "14807dd55e66",
+      "title": "Notice Takedown",
+      "team1": "Notice Takedown",
+      "team2": "",
+      "sport": "UFC",
+      "sport_icon": "🥊",
+      "sport_name": "UFC",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/dmca-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:21.142642"
+    },
+    {
+      "id": "f533c7000ab6",
+      "title": "Services",
+      "team1": "Services",
+      "team2": "",
+      "sport": "UFC",
+      "sport_icon": "🥊",
+      "sport_name": "UFC",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/services-list",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:21.142642"
+    },
+    {
+      "id": "2fcfec0bc84e",
+      "title": "VIPRow Sports",
+      "team1": "VIPRow Sports",
+      "team2": "",
+      "sport": "BOXING",
+      "sport_icon": "🥊",
+      "sport_name": "Boxing",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.513800"
+    },
+    {
+      "id": "b74976386a88",
+      "title": "Baseball",
+      "team1": "Baseball",
+      "team2": "",
+      "sport": "BOXING",
+      "sport_icon": "🥊",
+      "sport_name": "Boxing",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://mlbstreams.me",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.513800"
+    },
+    {
+      "id": "117e21a7f74a",
+      "title": "Cricket",
+      "team1": "Cricket",
+      "team2": "",
+      "sport": "BOXING",
+      "sport_icon": "🥊",
+      "sport_name": "Boxing",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://cricwatch.io",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.513800"
+    },
+    {
+      "id": "08c0f218d0d1",
+      "title": "Boxing - Day 4",
+      "team1": "Boxing",
+      "team2": "Day 4",
+      "sport": "BOXING",
+      "sport_icon": "🥊",
+      "sport_name": "Boxing",
+      "status": "live",
+      "start_time": "10:55",
+      "page_url": "https://www.viprow.nu/boxing/boxing-day-4-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.513800"
+    },
+    {
+      "id": "26421dd6bb3d",
+      "title": "Inside The Ring",
+      "team1": "Inside The Ring",
+      "team2": "",
+      "sport": "BOXING",
+      "sport_icon": "🥊",
+      "sport_name": "Boxing",
+      "status": "live",
+      "start_time": "19:00",
+      "page_url": "https://www.viprow.nu/boxing/inside-the-ring-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.513800"
+    },
+    {
+      "id": "610497400430",
+      "title": "Privacy Policy",
+      "team1": "Privacy Policy",
+      "team2": "",
+      "sport": "BOXING",
+      "sport_icon": "🥊",
+      "sport_name": "Boxing",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/privacy-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.513800"
+    },
+    {
+      "id": "b2b4cce64727",
+      "title": "Notice Takedown",
+      "team1": "Notice Takedown",
+      "team2": "",
+      "sport": "BOXING",
+      "sport_icon": "🥊",
+      "sport_name": "Boxing",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/dmca-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.513800"
+    },
+    {
+      "id": "f650262a1bcc",
+      "title": "Services",
+      "team1": "Services",
+      "team2": "",
+      "sport": "BOXING",
+      "sport_icon": "🥊",
+      "sport_name": "Boxing",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/services-list",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.513800"
+    },
+    {
+      "id": "82e8471e5f27",
+      "title": "VIPRow Sports",
+      "team1": "VIPRow Sports",
+      "team2": "",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "a5adef1c1428",
+      "title": "Baseball",
+      "team1": "Baseball",
+      "team2": "",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://mlbstreams.me",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "55da8a77d13f",
+      "title": "Cricket",
+      "team1": "Cricket",
+      "team2": "",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://cricwatch.io",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "568a0ba2d7f2",
+      "title": "NHL Network",
+      "team1": "NHL Network",
+      "team2": "",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/nhl/nhl-network-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "31cb916663f4",
+      "title": "New Jersey Devils v New York Islanders",
+      "team1": "New Jersey Devils",
+      "team2": "New York Islanders",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "00:00",
+      "page_url": "https://www.viprow.nu/nhl/new-jersey-devils-vs-new-york-islanders-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "323291a266fb",
+      "title": "New York Rangers v Nashville Predators",
+      "team1": "New York Rangers",
+      "team2": "Nashville Predators",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "00:00",
+      "page_url": "https://www.viprow.nu/nhl/new-york-rangers-vs-nashville-predators-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "0e9656029fbb",
+      "title": "Edmonton Oilers v Columbus Blue Jackets",
+      "team1": "Edmonton Oilers",
+      "team2": "Columbus Blue Jackets",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "01:30",
+      "page_url": "https://www.viprow.nu/nhl/edmonton-oilers-vs-columbus-blue-jackets-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "3c71d3e57c93",
+      "title": "Vegas Golden Knights v Florida Panthers",
+      "team1": "Vegas Golden Knights",
+      "team2": "Florida Panthers",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "03:00",
+      "page_url": "https://www.viprow.nu/nhl/vegas-golden-knights-vs-florida-panthers-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "9c4ab31be0e7",
+      "title": "Privacy Policy",
+      "team1": "Privacy Policy",
+      "team2": "",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/privacy-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "70a2ab61ff8a",
+      "title": "Notice Takedown",
+      "team1": "Notice Takedown",
+      "team2": "",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/dmca-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "7fe8f2223e38",
+      "title": "Services",
+      "team1": "Services",
+      "team2": "",
+      "sport": "NHL",
+      "sport_icon": "🏒",
+      "sport_name": "NHL",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/services-list",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.724146"
+    },
+    {
+      "id": "6d537f38c237",
+      "title": "VIPRow Sports",
+      "team1": "VIPRow Sports",
+      "team2": "",
+      "sport": "GOLF",
+      "sport_icon": "⛳",
+      "sport_name": "Golf",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:48.780235"
+    },
+    {
+      "id": "7a2086097ccd",
+      "title": "Baseball",
+      "team1": "Baseball",
+      "team2": "",
+      "sport": "GOLF",
+      "sport_icon": "⛳",
+      "sport_name": "Golf",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://mlbstreams.me",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:48.781805"
+    },
+    {
+      "id": "eddbdee0a8c6",
+      "title": "Cricket",
+      "team1": "Cricket",
+      "team2": "",
+      "sport": "GOLF",
+      "sport_icon": "⛳",
+      "sport_name": "Golf",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://cricwatch.io",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:48.781805"
+    },
+    {
+      "id": "c0493cd6b3df",
+      "title": "NBC Golf Channel",
+      "team1": "NBC Golf Channel",
+      "team2": "",
+      "sport": "GOLF",
+      "sport_icon": "⛳",
+      "sport_name": "Golf",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/pga-tour/nbc-golf-channel-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:48.781805"
+    },
+    {
+      "id": "4d3c4cb110c8",
+      "title": "PGA Tour 2025",
+      "team1": "PGA Tour 2025",
+      "team2": "",
+      "sport": "GOLF",
+      "sport_icon": "⛳",
+      "sport_name": "Golf",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/pga-tour/pga-tour-2025-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:48.783448"
+    },
+    {
+      "id": "d0a36f8c2f58",
+      "title": "Sky Sports Golf",
+      "team1": "Sky Sports Golf",
+      "team2": "",
+      "sport": "GOLF",
+      "sport_icon": "⛳",
+      "sport_name": "Golf",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/pga-tour/sky-sports-golf-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:48.783448"
+    },
+    {
+      "id": "a325f4d307f0",
+      "title": "Privacy Policy",
+      "team1": "Privacy Policy",
+      "team2": "",
+      "sport": "GOLF",
+      "sport_icon": "⛳",
+      "sport_name": "Golf",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/privacy-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:48.783448"
+    },
+    {
+      "id": "9f5b14f66efb",
+      "title": "Notice Takedown",
+      "team1": "Notice Takedown",
+      "team2": "",
+      "sport": "GOLF",
+      "sport_icon": "⛳",
+      "sport_name": "Golf",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/dmca-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:48.783448"
+    },
+    {
+      "id": "b63ee93c5b03",
+      "title": "Services",
+      "team1": "Services",
+      "team2": "",
+      "sport": "GOLF",
+      "sport_icon": "⛳",
+      "sport_name": "Golf",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/services-list",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:48.783448"
+    },
+    {
+      "id": "dfb0ce935759",
+      "title": "VIPRow Sports",
+      "team1": "VIPRow Sports",
+      "team2": "",
+      "sport": "DARTS",
+      "sport_icon": "🎯",
+      "sport_name": "Darts",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.826695"
+    },
+    {
+      "id": "70395a0d6b04",
+      "title": "Baseball",
+      "team1": "Baseball",
+      "team2": "",
+      "sport": "DARTS",
+      "sport_icon": "🎯",
+      "sport_name": "Darts",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://mlbstreams.me",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.826695"
+    },
+    {
+      "id": "51e19f94bae4",
+      "title": "Cricket",
+      "team1": "Cricket",
+      "team2": "",
+      "sport": "DARTS",
+      "sport_icon": "🎯",
+      "sport_name": "Darts",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://cricwatch.io",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.826695"
+    },
+    {
+      "id": "6d90962ecc0c",
+      "title": "Darts TV: All Darts Championship",
+      "team1": "Darts TV: All Darts Championship",
+      "team2": "",
+      "sport": "DARTS",
+      "sport_icon": "🎯",
+      "sport_name": "Darts",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/premier-league-darts/darts-tv-all-darts-championship-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.826695"
+    },
+    {
+      "id": "e4847edf3cec",
+      "title": "Sky Sports Darts",
+      "team1": "Sky Sports Darts",
+      "team2": "",
+      "sport": "DARTS",
+      "sport_icon": "🎯",
+      "sport_name": "Darts",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/pdc-world-championship/sky-sports-darts-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.826695"
+    },
+    {
+      "id": "02d09339a1bc",
+      "title": "Grand Slam of Darts: Day 3",
+      "team1": "Grand Slam of Darts: Day 3",
+      "team2": "",
+      "sport": "DARTS",
+      "sport_icon": "🎯",
+      "sport_name": "Darts",
+      "status": "live",
+      "start_time": "19:00",
+      "page_url": "https://www.viprow.nu/grand-slam-of-darts/grand-slam-of-darts-day-3-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.842598"
+    },
+    {
+      "id": "45cb7a2b53de",
+      "title": "Privacy Policy",
+      "team1": "Privacy Policy",
+      "team2": "",
+      "sport": "DARTS",
+      "sport_icon": "🎯",
+      "sport_name": "Darts",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/privacy-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.842598"
+    },
+    {
+      "id": "bfc54af8b504",
+      "title": "Notice Takedown",
+      "team1": "Notice Takedown",
+      "team2": "",
+      "sport": "DARTS",
+      "sport_icon": "🎯",
+      "sport_name": "Darts",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/dmca-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.842598"
+    },
+    {
+      "id": "0e99b3b55a2f",
+      "title": "Services",
+      "team1": "Services",
+      "team2": "",
+      "sport": "DARTS",
+      "sport_icon": "🎯",
+      "sport_name": "Darts",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/services-list",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:43.842598"
+    },
+    {
+      "id": "b062062899f5",
+      "title": "VIPRow Sports",
+      "team1": "VIPRow Sports",
+      "team2": "",
+      "sport": "RUGBY",
+      "sport_icon": "🏉",
+      "sport_name": "Rugby",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:20.964272"
+    },
+    {
+      "id": "9c9851b53231",
+      "title": "Baseball",
+      "team1": "Baseball",
+      "team2": "",
+      "sport": "RUGBY",
+      "sport_icon": "🏉",
+      "sport_name": "Rugby",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://mlbstreams.me",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:20.966284"
+    },
+    {
+      "id": "0a2d78e768b8",
+      "title": "Cricket",
+      "team1": "Cricket",
+      "team2": "",
+      "sport": "RUGBY",
+      "sport_icon": "🏉",
+      "sport_name": "Rugby",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://cricwatch.io",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:20.966284"
+    },
+    {
+      "id": "42f957e18455",
+      "title": "Fox NRL TV",
+      "team1": "Fox NRL TV",
+      "team2": "",
+      "sport": "RUGBY",
+      "sport_icon": "🏉",
+      "sport_name": "Rugby",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/nrl/fox-nrl-tv-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:20.966284"
+    },
+    {
+      "id": "64acd9ad6d3a",
+      "title": "Privacy Policy",
+      "team1": "Privacy Policy",
+      "team2": "",
+      "sport": "RUGBY",
+      "sport_icon": "🏉",
+      "sport_name": "Rugby",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/privacy-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:20.966284"
+    },
+    {
+      "id": "ef89a68f51fe",
+      "title": "Notice Takedown",
+      "team1": "Notice Takedown",
+      "team2": "",
+      "sport": "RUGBY",
+      "sport_icon": "🏉",
+      "sport_name": "Rugby",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/dmca-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:20.966284"
+    },
+    {
+      "id": "f1aaf71fe433",
+      "title": "Services",
+      "team1": "Services",
+      "team2": "",
+      "sport": "RUGBY",
+      "sport_icon": "🏉",
+      "sport_name": "Rugby",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/services-list",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:20.966284"
+    },
+    {
+      "id": "d2617db8bf42",
+      "title": "VIPRow Sports",
+      "team1": "VIPRow Sports",
+      "team2": "",
+      "sport": "F1",
+      "sport_icon": "🏎️",
+      "sport_name": "Formula 1",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:31.117311"
+    },
+    {
+      "id": "5837999b7d6b",
+      "title": "Baseball",
+      "team1": "Baseball",
+      "team2": "",
+      "sport": "F1",
+      "sport_icon": "🏎️",
+      "sport_name": "Formula 1",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://mlbstreams.me",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:31.117311"
+    },
+    {
+      "id": "cbbc813aa335",
+      "title": "Cricket",
+      "team1": "Cricket",
+      "team2": "",
+      "sport": "F1",
+      "sport_icon": "🏎️",
+      "sport_name": "Formula 1",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://cricwatch.io",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:31.117311"
+    },
+    {
+      "id": "9f1c23260067",
+      "title": "Sky Sports F1 | Sky F1",
+      "team1": "Sky Sports F1 | Sky F1",
+      "team2": "",
+      "sport": "F1",
+      "sport_icon": "🏎️",
+      "sport_name": "Formula 1",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/formula-1/sky-sports-f1-sky-f1-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:31.117311"
+    },
+    {
+      "id": "c34042db5415",
+      "title": "DAZN Formula 1 | DAZN F1",
+      "team1": "DAZN Formula 1 | DAZN F1",
+      "team2": "",
+      "sport": "F1",
+      "sport_icon": "🏎️",
+      "sport_name": "Formula 1",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/formula-1/dazn-formula-1-dazn-f1-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:31.117311"
+    },
+    {
+      "id": "254945a08a85",
+      "title": "F1 Qualifying | F1 Main Race",
+      "team1": "F1 Qualifying | F1 Main Race",
+      "team2": "",
+      "sport": "F1",
+      "sport_icon": "🏎️",
+      "sport_name": "Formula 1",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/formula-1/f1-qualifying-f1-main-race-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:31.117311"
+    },
+    {
+      "id": "295fa9ae0c54",
+      "title": "Privacy Policy",
+      "team1": "Privacy Policy",
+      "team2": "",
+      "sport": "F1",
+      "sport_icon": "🏎️",
+      "sport_name": "Formula 1",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/privacy-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:31.117311"
+    },
+    {
+      "id": "99f6b495727c",
+      "title": "Notice Takedown",
+      "team1": "Notice Takedown",
+      "team2": "",
+      "sport": "F1",
+      "sport_icon": "🏎️",
+      "sport_name": "Formula 1",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/dmca-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:31.117311"
+    },
+    {
+      "id": "50ea76d99c3f",
+      "title": "Services",
+      "team1": "Services",
+      "team2": "",
+      "sport": "F1",
+      "sport_icon": "🏎️",
+      "sport_name": "Formula 1",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/services-list",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:31.117311"
+    },
+    {
+      "id": "0e851c12f75a",
+      "title": "VIPRow Sports",
+      "team1": "VIPRow Sports",
+      "team2": "",
+      "sport": "MOTOGP",
+      "sport_icon": "🏍️",
+      "sport_name": "MotoGP",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.642926"
+    },
+    {
+      "id": "f19f8f87b716",
+      "title": "Baseball",
+      "team1": "Baseball",
+      "team2": "",
+      "sport": "MOTOGP",
+      "sport_icon": "🏍️",
+      "sport_name": "MotoGP",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://mlbstreams.me",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.642926"
+    },
+    {
+      "id": "9cacf2d514ab",
+      "title": "Cricket",
+      "team1": "Cricket",
+      "team2": "",
+      "sport": "MOTOGP",
+      "sport_icon": "🏍️",
+      "sport_name": "MotoGP",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://cricwatch.io",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.642926"
+    },
+    {
+      "id": "7d8695225f48",
+      "title": "MotoGP Qualifying | MotoGP Main Race",
+      "team1": "MotoGP Qualifying | MotoGP Main Race",
+      "team2": "",
+      "sport": "MOTOGP",
+      "sport_icon": "🏍️",
+      "sport_name": "MotoGP",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/moto-gp/motogp-qualifying-motogp-main-race-online-stream",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.642926"
+    },
+    {
+      "id": "dbac4517a7a1",
+      "title": "Privacy Policy",
+      "team1": "Privacy Policy",
+      "team2": "",
+      "sport": "MOTOGP",
+      "sport_icon": "🏍️",
+      "sport_name": "MotoGP",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/privacy-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.642926"
+    },
+    {
+      "id": "5d3d386461ee",
+      "title": "Notice Takedown",
+      "team1": "Notice Takedown",
+      "team2": "",
+      "sport": "MOTOGP",
+      "sport_icon": "🏍️",
+      "sport_name": "MotoGP",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/dmca-page",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.642926"
+    },
+    {
+      "id": "9b505a47bf6b",
+      "title": "Services",
+      "team1": "Services",
+      "team2": "",
+      "sport": "MOTOGP",
+      "sport_icon": "🏍️",
+      "sport_name": "MotoGP",
+      "status": "live",
+      "start_time": "Live",
+      "page_url": "https://www.viprow.nu/services-list",
+      "stream_urls": [],
+      "iframe_url": null,
+      "quality": [
+        "HD"
+      ],
+      "scraped_at": "2025-11-10T10:07:22.642926"
+    }
+  ],
+  "last_update": "2025-11-10T10:07:48.791008",
+  "last_reset": "2025-11-10",
+  "total_scraped": 66,
+  "sports_count": {
+    "UFC": 6,
+    "BOXING": 8,
+    "NHL": 11,
+    "GOLF": 9,
+    "DARTS": 9,
+    "RUGBY": 7,
+    "F1": 9,
+    "MOTOGP": 7
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "6918278858": {
+    "id": 6918278858,
+    "username": "Makforest",
+    "first_name": "Mak",
+    "first_seen": "2025-11-10T00:50:42.784321",
+    "last_seen": "2025-11-10T00:52:10.298406",
+    "total_visits": 4
+  },
+  "5123685066": {
+    "id": 5123685066,
+    "username": "elijakson6",
+    "first_name": "Eli",
+    "first_seen": "2025-11-10T06:36:00.499824",
+    "last_seen": "2025-11-10T06:36:01.820274",
+    "total_visits": 2
+  },
+  "6803485913": {
+    "id": 6803485913,
+    "username": null,
+    "first_name": "Sarah",
+    "first_seen": "2025-11-10T06:36:02.267066",
+    "last_seen": "2025-11-10T06:36:02.765162",
+    "total_visits": 2
+  },
+  "7686059549": {
+    "id": 7686059549,
+    "username": null,
+    "first_name": "Rois",
+    "first_seen": "2025-11-10T06:36:03.166590",
+    "last_seen": "2025-11-10T06:36:03.704037",
+    "total_visits": 2
+  },
+  "8375201522": {
+    "id": 8375201522,
+    "username": null,
+    "first_name": "Nke",
+    "first_seen": "2025-11-10T08:41:38.541234",
+    "last_seen": "2025-11-10T08:48:14.671799",
+    "total_visits": 6
+  }
+}
