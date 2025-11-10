@@ -1297,72 +1297,93 @@ def signal_handler(signum, frame):
     stop_http_server()
     sys.exit(0)
 
-def main():
-    """Point d'entrée principal avec gestion complète"""
+def main_with_resilience():
+    """Main avec auto-redémarrage et gestion des erreurs"""
+    max_consecutive_failures = 3
+    failure_count = 0
+    start_time = datetime.now()
+    
+    while True:
+        try:
+            logger.info("=" * 80)
+            logger.info(f"🚀 DÉMARRAGE DU BOT - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"⏱️  Uptime depuis: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info("=" * 80)
+            
+            # Configuration des signaux
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+            
+            # Démarrer le serveur HTTP
+            http_thread = threading.Thread(target=start_http_server, daemon=True, name="HTTPServer")
+            http_thread.start()
+            logger.info("✅ Thread HTTP démarré")
+            
+            # Construction de l'application
+            application = (
+                Application.builder()
+                .token(BOT_TOKEN)
+                .post_init(post_init)
+                .post_shutdown(post_shutdown)
+                .build()
+            )
+            
+            # Enregistrement des handlers
+            application.add_handler(CommandHandler("start", start))
+            application.add_handler(CallbackQueryHandler(callback_handler))
+            
+            logger.info("✅ BOT PRÊT - Polling actif")
+            
+            # Lancer le bot
+            application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+                close_loop=False
+            )
+            
+            # Si on arrive ici, c'est un arrêt propre
+            logger.info("✅ Arrêt normal du bot")
+            break  # Sortie normale
+            
+        except KeyboardInterrupt:
+            logger.info("⚠️  Arrêt manuel (CTRL+C)")
+            break
+            
+        except Exception as e:
+            failure_count += 1
+            logger.error(f"❌ ERREUR FATALE (tentative {failure_count}/{max_consecutive_failures})")
+            logger.error(f"   Type: {type(e).__name__}")
+            logger.error(f"   Message: {str(e)[:200]}")
+            
+            if failure_count >= max_consecutive_failures:
+                logger.critical("💀 TROP D'ERREURS CONSÉCUTIVES - ARRÊT DÉFINITIF")
+                break
+            
+            # Délai exponentiel avant redémarrage
+            wait_time = min(30 * (2 ** failure_count), 300)  # Max 5 min
+            logger.warning(f"⏳ Redémarrage dans {wait_time}s...")
+            
+            try:
+                time.sleep(wait_time)
+            except KeyboardInterrupt:
+                logger.info("⚠️  Annulation du redémarrage")
+                break
+            
+            # Reset le compteur si on tient plus de 1h
+            if (datetime.now() - start_time).seconds > 3600:
+                failure_count = 0
+                logger.info("✅ Reset du compteur d'erreurs (1h+ de stabilité)")
+        
+        finally:
+            # Nettoyage
+            stop_http_server()
+            shutdown_event.set()
+    
     logger.info("=" * 80)
-    logger.info("🚀 VIPROW ULTIMATE PRO BOT - PRODUCTION READY")
+    logger.info("👋 BOT ARRÊTÉ DÉFINITIVEMENT")
     logger.info("=" * 80)
-    
-    # Configuration des signaux pour arrêt propre
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    
-    # Démarrer le serveur HTTP dans un thread séparé
-    http_thread = threading.Thread(target=start_http_server, daemon=True, name="HTTPServer")
-    http_thread.start()
-    logger.info("✅ Thread HTTP démarré")
-    
-    # Construction de l'application avec hooks
-    application = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .post_init(post_init)
-        .post_shutdown(post_shutdown)
-        .build()
-    )
-    
-    # Enregistrement des handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(callback_handler))
-    
-    logger.info("")
-    logger.info("✅ BOT CONFIGURÉ AVEC SUCCÈS")
-    logger.info("")
-    logger.info("📊 FONCTIONNALITÉS:")
-    logger.info("   ✅ Scraping 16 sports VIPRow")
-    logger.info("   ✅ Visionnage DIRECT Telegram")
-    logger.info("   ✅ Extraction auto streams")
-    logger.info("   ✅ Multi-qualité HD")
-    logger.info("   ✅ Favoris utilisateurs")
-    logger.info("   ✅ MAJ auto 10 min")
-    logger.info("   ✅ Reset quotidien minuit")
-    logger.info("   ✅ Tracking utilisateurs")
-    logger.info("   ✅ Panel admin complet")
-    logger.info("   ✅ Serveur HTTP pour Render")
-    logger.info("   ✅ Gestion propre des tâches")
-    logger.info("")
-    logger.info("🌐 SPORTS DISPONIBLES:")
-    for key, config in SPORTS_CONFIGURATION.items():
-        logger.info(f"   {config['icon']} {config['name']}")
-    logger.info("")
-    logger.info("=" * 80)
-    logger.info("🎯 Démarrage du polling...")
-    logger.info("=" * 80)
-    
-    try:
-        # Lancer le bot avec polling
-        application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-            close_loop=False
-        )
-    except KeyboardInterrupt:
-        logger.info("⚠️ Arrêt demandé par l'utilisateur")
-    except Exception as e:
-        logger.error(f"❌ Erreur fatale: {e}")
-    finally:
-        stop_http_server()
-        logger.info("👋 Bot arrêté proprement")
+
 
 if __name__ == '__main__':
-    main()
+    # Version avec auto-restart
+    main_with_resilience()
