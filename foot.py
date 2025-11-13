@@ -1261,11 +1261,19 @@ class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
+        self.send_header('Content-Length', '14')
         self.end_headers()
         self.wfile.write(b'Bot Running OK')
     
+    def do_HEAD(self):
+        """Support pour UptimeRobot et monitoring"""
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.send_header('Content-Length', '14')
+        self.end_headers()
+    
     def log_message(self, format, *args):
-        pass  # Supprimer les logs HTTP
+        pass
 
 def start_http_server():
     """Démarre le serveur HTTP dans un thread"""
