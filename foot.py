@@ -132,13 +132,15 @@ MAX_RETRIES = 3
 TIMEOUT = 25
 REQUEST_DELAY = 0.5
 
-# Variables globales pour la gestion propre
+# Variables globales
 background_tasks = set()
 http_server = None
+http_server_ready = threading.Event()
 shutdown_event = asyncio.Event()
+bot_initialized = False
 
 # ============================================================================
-# 📦 DATA MANAGER (identique)
+# 📦 DATA MANAGER
 # ============================================================================
 
 class DataManager:
@@ -264,7 +266,7 @@ class DataManager:
             logger.error(f"❌ Erreur cache: {e}")
 
 # ============================================================================
-# 🕷️ VIPROW ULTRA SCRAPER (identique, juste corrections mineures)
+# 🕷️ VIPROW SCRAPER
 # ============================================================================
 
 class VIPRowUltraScraper:
@@ -532,7 +534,7 @@ class VIPRowUltraScraper:
         return await self.parse_sport_page(html, sport_key, url) if html else []
 
 # ============================================================================
-# 🤖 TELEGRAM HANDLERS (identiques, code inchangé)
+# 🤖 TELEGRAM HANDLERS (code identique, conservé pour la complétude)
 # ============================================================================
 
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -1115,7 +1117,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer("⚠️ Rejoignez le canal !", show_alert=True)
                 return
     
-    # Routing
     if data == "check_sub":
         is_sub = await check_subscription(user_id, context)
         if is_sub:
@@ -1166,12 +1167,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await toggle_favorite(query, match_id)
 
 # ============================================================================
-# 🔄 TÂCHES AUTO AVEC GESTION PROPRE
+# 🔄 TÂCHES AUTO AVEC GESTION ROBUSTE
 # ============================================================================
 
 async def auto_update_loop(application):
-    """MAJ auto toutes les 10 min avec gestion d'erreurs robuste"""
-    await asyncio.sleep(60)  # Délai initial
+    """MAJ auto toutes les 10 min avec gestion d'erreurs"""
+    await asyncio.sleep(60)
     
     while not shutdown_event.is_set():
         try:
@@ -1186,13 +1187,13 @@ async def auto_update_loop(application):
             logger.error(f"❌ Erreur MAJ auto: {e}")
         
         try:
-            await asyncio.wait_for(shutdown_event.wait(), timeout=600)  # 10 min
+            await asyncio.wait_for(shutdown_event.wait(), timeout=600)
             break
         except asyncio.TimeoutError:
             continue
 
 async def daily_reset_loop(application):
-    """Reset quotidien à minuit avec gestion propre"""
+    """Reset quotidien à minuit"""
     while not shutdown_event.is_set():
         try:
             now = datetime.now()
@@ -1213,90 +1214,138 @@ async def daily_reset_loop(application):
             break
         except Exception as e:
             logger.error(f"❌ Erreur reset: {e}")
-            await asyncio.sleep(3600)  # Retry dans 1h en cas d'erreur
+            await asyncio.sleep(3600)
 
 async def post_init(application: Application):
     """Initialisation avec gestion propre des tâches"""
+    global bot_initialized
+    
     logger.info("🚀 Initialisation des tâches de fond...")
     
-    # Créer les tâches
     task1 = asyncio.create_task(auto_update_loop(application), name="auto_update")
     task2 = asyncio.create_task(daily_reset_loop(application), name="daily_reset")
     
-    # Stocker les tâches
     background_tasks.add(task1)
     background_tasks.add(task2)
     
-    # Retirer automatiquement quand terminées
     task1.add_done_callback(background_tasks.discard)
     task2.add_done_callback(background_tasks.discard)
     
+    bot_initialized = True
     logger.info("✅ Tâches de fond démarrées")
 
 async def post_shutdown(application: Application):
     """Arrêt propre de toutes les tâches"""
     logger.info("🛑 Arrêt des tâches de fond...")
     
-    # Signaler l'arrêt
     shutdown_event.set()
     
-    # Annuler toutes les tâches
     for task in background_tasks:
         if not task.done():
             task.cancel()
     
-    # Attendre la fin de toutes les tâches
     if background_tasks:
         await asyncio.gather(*background_tasks, return_exceptions=True)
     
     logger.info("✅ Toutes les tâches arrêtées proprement")
 
 # ============================================================================
-# 🌐 SERVEUR HTTP SIMPLE POUR RENDER
+# 🌐 SERVEUR HTTP ROBUSTE POUR RENDER
 # ============================================================================
 
-class SimpleHandler(BaseHTTPRequestHandler):
-    """Handler HTTP minimaliste pour health checks Render"""
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    """Handler HTTP avec health check avancé"""
     
     def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.send_header('Content-Length', '14')
-        self.end_headers()
-        self.wfile.write(b'Bot Running OK')
+        try:
+            if self.path == '/health':
+                self.send_health_response()
+            else:
+                self.send_ok_response()
+        except Exception as e:
+            logger.error(f"❌ Erreur HTTP handler: {e}")
+            self.send_error_response()
     
     def do_HEAD(self):
-        """Support pour UptimeRobot et monitoring"""
+        try:
+            self.send_ok_response()
+        except Exception as e:
+            logger.error(f"❌ Erreur HTTP HEAD: {e}")
+    
+    def send_ok_response(self):
+        response = b'Bot Running OK'
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
-        self.send_header('Content-Length', '14')
+        self.send_header('Content-Length', str(len(response)))
+        self.send_header('Cache-Control', 'no-cache')
         self.end_headers()
+        self.wfile.write(response)
+    
+    def send_health_response(self):
+        health_data = {
+            'status': 'healthy',
+            'bot_initialized': bot_initialized,
+            'timestamp': datetime.now().isoformat(),
+            'uptime': 'running'
+        }
+        response = json.dumps(health_data).encode('utf-8')
+        
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Content-Length', str(len(response)))
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        self.wfile.write(response)
+    
+    def send_error_response(self):
+        response = b'Error'
+        self.send_response(500)
+        self.send_header('Content-type', 'text/plain')
+        self.send_header('Content-Length', str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
     
     def log_message(self, format, *args):
         pass
 
 def start_http_server():
-    """Démarre le serveur HTTP dans un thread"""
+    """Démarre le serveur HTTP avec retry logic"""
     global http_server
     port = int(os.environ.get('PORT', 8080))
+    max_retries = 5
     
-    try:
-        http_server = HTTPServer(('0.0.0.0', port), SimpleHandler)
-        logger.info(f"🌐 Serveur HTTP démarré sur port {port}")
-        http_server.serve_forever()
-    except Exception as e:
-        logger.error(f"❌ Erreur serveur HTTP: {e}")
+    for attempt in range(max_retries):
+        try:
+            http_server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+            logger.info(f"🌐 Serveur HTTP démarré sur port {port}")
+            http_server_ready.set()
+            http_server.serve_forever()
+            break
+        except OSError as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"⚠️ Tentative {attempt+1}/{max_retries}: {e}")
+                time.sleep(2 ** attempt)
+            else:
+                logger.error(f"❌ Impossible de démarrer le serveur HTTP: {e}")
+                raise
+        except Exception as e:
+            logger.error(f"❌ Erreur serveur HTTP: {e}")
+            raise
 
 def stop_http_server():
     """Arrête le serveur HTTP proprement"""
     global http_server
     if http_server:
         logger.info("🛑 Arrêt du serveur HTTP...")
-        http_server.shutdown()
-        logger.info("✅ Serveur HTTP arrêté")
+        try:
+            http_server.shutdown()
+            http_server.server_close()
+            logger.info("✅ Serveur HTTP arrêté")
+        except Exception as e:
+            logger.error(f"❌ Erreur arrêt serveur: {e}")
 
 # ============================================================================
-# 🚀 MAIN AVEC GESTION COMPLÈTE
+# 🚀 MAIN AVEC GESTION COMPLÈTE ET ROBUSTE
 # ============================================================================
 
 def signal_handler(signum, frame):
@@ -1308,26 +1357,46 @@ def signal_handler(signum, frame):
 def main():
     """Point d'entrée principal avec gestion complète"""
     logger.info("=" * 80)
-    logger.info("🚀 VIPROW ULTIMATE PRO BOT - PRODUCTION READY")
+    logger.info("🚀 VIPROW ULTIMATE PRO BOT - PRODUCTION READY V2")
     logger.info("=" * 80)
     
-    # Configuration des signaux pour arrêt propre
+    # Validation du token
+    if not BOT_TOKEN or len(BOT_TOKEN) < 20:
+        logger.error("❌ BOT_TOKEN invalide ou manquant!")
+        logger.error("💡 Définissez la variable d'environnement BOT_TOKEN")
+        sys.exit(1)
+    
+    # Configuration des signaux
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Démarrer le serveur HTTP dans un thread séparé
-    http_thread = threading.Thread(target=start_http_server, daemon=True, name="HTTPServer")
+    # Démarrer le serveur HTTP en premier (NON daemon)
+    http_thread = threading.Thread(target=start_http_server, daemon=False, name="HTTPServer")
     http_thread.start()
-    logger.info("✅ Thread HTTP démarré")
     
-    # Construction de l'application avec hooks
-    application = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .post_init(post_init)
-        .post_shutdown(post_shutdown)
-        .build()
-    )
+    # Attendre que le serveur soit prêt
+    if not http_server_ready.wait(timeout=10):
+        logger.error("❌ Timeout: serveur HTTP non démarré")
+        sys.exit(1)
+    
+    logger.info("✅ Serveur HTTP opérationnel")
+    
+    # Construction de l'application
+    try:
+        application = (
+            Application.builder()
+            .token(BOT_TOKEN)
+            .post_init(post_init)
+            .post_shutdown(post_shutdown)
+            .connect_timeout(30)
+            .read_timeout(30)
+            .write_timeout(30)
+            .build()
+        )
+    except Exception as e:
+        logger.error(f"❌ Erreur construction application: {e}")
+        stop_http_server()
+        sys.exit(1)
     
     # Enregistrement des handlers
     application.add_handler(CommandHandler("start", start))
@@ -1346,8 +1415,8 @@ def main():
     logger.info("   ✅ Reset quotidien minuit")
     logger.info("   ✅ Tracking utilisateurs")
     logger.info("   ✅ Panel admin complet")
-    logger.info("   ✅ Serveur HTTP pour Render")
-    logger.info("   ✅ Gestion propre des tâches")
+    logger.info("   ✅ Serveur HTTP robuste")
+    logger.info("   ✅ Health checks /health")
     logger.info("")
     logger.info("🌐 SPORTS DISPONIBLES:")
     for key, config in SPORTS_CONFIGURATION.items():
@@ -1358,16 +1427,18 @@ def main():
     logger.info("=" * 80)
     
     try:
-        # Lancer le bot avec polling
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
-            close_loop=False
+            close_loop=False,
+            stop_signals=None
         )
     except KeyboardInterrupt:
         logger.info("⚠️ Arrêt demandé par l'utilisateur")
     except Exception as e:
         logger.error(f"❌ Erreur fatale: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         stop_http_server()
         logger.info("👋 Bot arrêté proprement")
