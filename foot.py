@@ -1254,83 +1254,112 @@ async def post_shutdown(application: Application):
 # ============================================================================
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
-    """Handler HTTP avec health check avancé"""
+    """Handler HTTP optimisé pour UptimeRobot et monitoring"""
     
     def do_GET(self):
         try:
-            if self.path == '/health':
-                self.send_health_response()
+            # Support de HEAD pour certains monitors
+            if self.path in ['/', '/health', '/status', '/ping']:
+                self.send_success_response()
             else:
-                self.send_ok_response()
+                self.send_success_response()
         except Exception as e:
-            logger.error(f"❌ Erreur HTTP handler: {e}")
-            self.send_error_response()
+            logger.error(f"❌ Erreur HTTP GET: {e}")
+            try:
+                self.send_error_response()
+            except:
+                pass
     
     def do_HEAD(self):
+        """Support HEAD pour UptimeRobot"""
         try:
-            self.send_ok_response()
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header('Content-Length', '14')
+            self.send_header('Connection', 'close')
+            self.end_headers()
         except Exception as e:
             logger.error(f"❌ Erreur HTTP HEAD: {e}")
     
-    def send_ok_response(self):
-        response = b'Bot Running OK'
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.send_header('Content-Length', str(len(response)))
-        self.send_header('Cache-Control', 'no-cache')
-        self.end_headers()
-        self.wfile.write(response)
-    
-    def send_health_response(self):
-        health_data = {
-            'status': 'healthy',
-            'bot_initialized': bot_initialized,
-            'timestamp': datetime.now().isoformat(),
-            'uptime': 'running'
-        }
-        response = json.dumps(health_data).encode('utf-8')
+    def send_success_response(self):
+        """Réponse de succès standardisée"""
+        if self.path == '/health':
+            # Réponse JSON détaillée pour /health
+            health_data = {
+                'status': 'healthy',
+                'service': 'viprow-bot',
+                'bot_initialized': bot_initialized,
+                'timestamp': datetime.now().isoformat(),
+                'uptime': 'running'
+            }
+            response = json.dumps(health_data).encode('utf-8')
+            content_type = 'application/json'
+        else:
+            # Réponse simple pour les autres paths
+            response = b'OK'
+            content_type = 'text/plain'
         
         self.send_response(200)
-        self.send_header('Content-type', 'application/json')
+        self.send_header('Content-type', content_type)
         self.send_header('Content-Length', str(len(response)))
-        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Connection', 'close')
+        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
         self.end_headers()
         self.wfile.write(response)
     
     def send_error_response(self):
+        """Réponse d'erreur"""
         response = b'Error'
         self.send_response(500)
         self.send_header('Content-type', 'text/plain')
         self.send_header('Content-Length', str(len(response)))
+        self.send_header('Connection', 'close')
         self.end_headers()
         self.wfile.write(response)
     
     def log_message(self, format, *args):
+        """Désactiver les logs HTTP verbeux"""
         pass
 
 def start_http_server():
-    """Démarre le serveur HTTP avec retry logic"""
+    """Démarre le serveur HTTP avec configuration robuste pour UptimeRobot"""
     global http_server
     port = int(os.environ.get('PORT', 8080))
-    max_retries = 5
+    max_retries = 3
     
     for attempt in range(max_retries):
         try:
+            # Configuration du serveur avec timeout
             http_server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-            logger.info(f"🌐 Serveur HTTP démarré sur port {port}")
+            http_server.timeout = 30
+            
+            logger.info(f"🌐 Serveur HTTP démarré sur 0.0.0.0:{port}")
+            logger.info(f"📡 Health check: http://0.0.0.0:{port}/")
+            logger.info(f"📊 Status endpoint: http://0.0.0.0:{port}/health")
+            
             http_server_ready.set()
+            
+            # Servir les requêtes
             http_server.serve_forever()
             break
+            
         except OSError as e:
-            if attempt < max_retries - 1:
-                logger.warning(f"⚠️ Tentative {attempt+1}/{max_retries}: {e}")
-                time.sleep(2 ** attempt)
-            else:
-                logger.error(f"❌ Impossible de démarrer le serveur HTTP: {e}")
+            if e.errno == 98:  # Address already in use
+                logger.warning(f"⚠️ Port {port} occupé, tentative {attempt+1}/{max_retries}")
+                if attempt < max_retries - 1:
+                    time.sleep(3)
+                    continue
+            logger.error(f"❌ Erreur OSError: {e}")
+            if attempt == max_retries - 1:
                 raise
+                
         except Exception as e:
             logger.error(f"❌ Erreur serveur HTTP: {e}")
-            raise
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(2)
 
 def stop_http_server():
     """Arrête le serveur HTTP proprement"""
