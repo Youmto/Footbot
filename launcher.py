@@ -145,6 +145,17 @@ async def main():
     os.makedirs("data/shared", exist_ok=True)
     logger.info("✅ Dossiers de données créés")
     
+    # Restaurer les données depuis le backup
+    try:
+        from backup_manager import backup_manager
+        logger.info("📦 Restauration des données depuis le backup...")
+        if backup_manager.restore_all_bots():
+            logger.info("✅ Données restaurées avec succès")
+        else:
+            logger.info("ℹ️ Démarrage avec des données vides")
+    except Exception as e:
+        logger.warning(f"⚠️ Impossible de restaurer le backup: {e}")
+    
     # Vérification des tokens
     footbot_token = os.environ.get("FOOTBOT_TOKEN", "")
     sexbot_token = os.environ.get("SEXBOT_TOKEN", "")
@@ -200,6 +211,15 @@ async def main():
     finally:
         # Annuler toutes les tâches restantes
         logger.info("🛑 Arrêt de tous les bots...")
+        
+        # Sauvegarder les données avant l'arrêt
+        try:
+            from backup_manager import backup_manager
+            logger.info("💾 Sauvegarde des données...")
+            if backup_manager.backup_all_bots():
+                logger.info("✅ Données sauvegardées")
+        except Exception as e:
+            logger.error(f"❌ Erreur sauvegarde: {e}")
         
         for task in running_tasks:
             if not task.done():
