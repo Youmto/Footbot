@@ -1,13 +1,16 @@
+"""
+LAUNCHER MULTI-BOTS
+Gère plusieurs bots Telegram en parallèle
+"""
 import asyncio
 import logging
-import sys
 import os
-from multiprocessing import Process
+import sys
 import signal
-import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import time
+import threading
 
+# Configuration du logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -15,266 +18,220 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Variables globales
-footbot_process = None
-sexbot_process = None
 http_server = None
-http_server_ready = threading.Event()
+running_tasks = []
+shutdown_event = asyncio.Event()
 
 # ============================================================================
-# 🌐 SERVEUR HTTP UNIQUE
+# SERVEUR HTTP (HEALTH CHECK POUR RENDER)
 # ============================================================================
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
-    """Handler HTTP pour Render et monitoring"""
+    """Gestionnaire HTTP simple pour le health check"""
     
     def do_GET(self):
         self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-        
-        # Status HTML
-        status_html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Multi-Bot Server</title>
-            <meta charset="UTF-8">
-            <style>
-                body { font-family: Arial; background: #1a1a1a; color: #fff; padding: 20px; }
-                .bot { background: #2a2a2a; padding: 20px; margin: 10px 0; border-radius: 10px; }
-                .status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 10px; }
-                .active { background: #0f0; }
-                .inactive { background: #f00; }
-            </style>
-        </head>
-        <body>
-            <h1>🤖 Multi-Bot Server Status</h1>
-            <div class="bot">
-                <h2><span class="status {footbot_status}"></span>⚽ FootBot</h2>
-                <p>Status: {footbot_text}</p>
-            </div>
-            <div class="bot">
-                <h2><span class="status {sexbot_status}"></span>🔞 SexBot</h2>
-                <p>Status: {sexbot_text}</p>
-            </div>
-            <p><small>Server Time: {time}</small></p>
-        </body>
-        </html>
-        """
-        
-        footbot_running = footbot_process and footbot_process.is_alive()
-        sexbot_running = sexbot_process and sexbot_process.is_alive()
-        
-        html = status_html.format(
-            footbot_status="active" if footbot_running else "inactive",
-            footbot_text="Running ✅" if footbot_running else "Stopped ❌",
-            sexbot_status="active" if sexbot_running else "inactive",
-            sexbot_text="Running ✅" if sexbot_running else "Stopped ❌",
-            time=time.strftime("%Y-%m-%d %H:%M:%S")
-        )
-        
-        self.wfile.write(html.encode('utf-8'))
-    
-    def do_HEAD(self):
-        self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
+        self.wfile.write(b'Multi-Bot Server Running OK')
     
     def log_message(self, format, *args):
-        pass  # Désactiver les logs HTTP verbeux
+        """Désactive les logs HTTP"""
+        pass
 
 def start_http_server():
-    """Démarre le serveur HTTP unique"""
+    """Démarre le serveur HTTP en arrière-plan"""
     global http_server
     port = int(os.environ.get('PORT', 8080))
     
     try:
         http_server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-        logger.info(f"🌐 Serveur HTTP démarré sur port {port}")
-        logger.info(f"📊 Status: http://0.0.0.0:{port}/")
-        http_server_ready.set()
+        logger.info(f"🌐 Serveur HTTP démarré sur le port {port}")
         http_server.serve_forever()
     except Exception as e:
         logger.error(f"❌ Erreur serveur HTTP: {e}")
 
 def stop_http_server():
-    """Arrête le serveur HTTP"""
+    """Arrête le serveur HTTP proprement"""
     global http_server
     if http_server:
-        logger.info("🛑 Arrêt serveur HTTP...")
-        http_server.shutdown()
-        http_server.server_close()
+        try:
+            http_server.shutdown()
+            http_server.server_close()
+            logger.info("✅ Serveur HTTP arrêté")
+        except Exception as e:
+            logger.error(f"❌ Erreur arrêt serveur HTTP: {e}")
 
 # ============================================================================
-# 🤖 GESTION DES BOTS
+# GESTION DES BOTS
 # ============================================================================
 
-def run_footbot():
+async def run_footbot():
     """Lance le bot Football"""
     try:
-        logger.info("⚽ Démarrage FootBot...")
+        logger.info("⚽ Démarrage de FootBot...")
+        
+        # Import du module
         import footbot
-        footbot.main()
+        
+        # Créer une task pour exécuter le bot
+        loop = asyncio.get_event_loop()
+        
+        # Exécuter le main dans un thread séparé pour éviter les conflits d'event loop
+        await loop.run_in_executor(None, footbot.main)
+        
+    except asyncio.CancelledError:
+        logger.info("⚽ FootBot arrêté (cancelled)")
+        raise
     except Exception as e:
         logger.error(f"❌ Erreur FootBot: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        raise
 
-def run_sexbot():
-    """Lance le bot Adulte"""
+async def run_sexbot():
+    """Lance le bot Sexbot"""
     try:
-        logger.info("🔞 Démarrage SexBot...")
+        logger.info("🔞 Démarrage de SexBot...")
+        
+        # Import du module
         import sexbot
-        sexbot.main()
+        
+        # Créer une task pour exécuter le bot
+        loop = asyncio.get_event_loop()
+        
+        # Exécuter le main dans un thread séparé pour éviter les conflits d'event loop
+        await loop.run_in_executor(None, sexbot.main)
+        
+    except asyncio.CancelledError:
+        logger.info("🔞 SexBot arrêté (cancelled)")
+        raise
     except Exception as e:
         logger.error(f"❌ Erreur SexBot: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        raise
+
+# ============================================================================
+# SIGNAL HANDLER
+# ============================================================================
 
 def signal_handler(signum, frame):
-    """Gestion de l'arrêt propre"""
-    logger.info(f"⚠️ Signal {signum} reçu, arrêt des bots...")
+    """Gère les signaux d'arrêt proprement"""
+    logger.info(f"⚠️ Signal {signum} reçu - Arrêt en cours...")
     
-    if footbot_process and footbot_process.is_alive():
-        logger.info("🛑 Arrêt FootBot...")
-        footbot_process.terminate()
-        footbot_process.join(timeout=5)
-        if footbot_process.is_alive():
-            footbot_process.kill()
+    # Marquer l'arrêt
+    shutdown_event.set()
     
-    if sexbot_process and sexbot_process.is_alive():
-        logger.info("🛑 Arrêt SexBot...")
-        sexbot_process.terminate()
-        sexbot_process.join(timeout=5)
-        if sexbot_process.is_alive():
-            sexbot_process.kill()
+    # Annuler toutes les tâches en cours
+    for task in running_tasks:
+        if not task.done():
+            task.cancel()
     
+    # Arrêter le serveur HTTP
     stop_http_server()
-    logger.info("✅ Tous les bots arrêtés")
-    sys.exit(0)
 
 # ============================================================================
-# 🚀 MAIN
+# MAIN LAUNCHER
 # ============================================================================
 
-def main():
-    """Lance les deux bots en parallèle"""
-    global footbot_process, sexbot_process
+async def main():
+    """Lance tous les bots en parallèle"""
+    global running_tasks
     
     logger.info("=" * 70)
-    logger.info("🚀 MULTI-BOT LAUNCHER - RENDER DEPLOYMENT")
+    logger.info("🚀 MULTI-BOT LAUNCHER - DÉMARRAGE")
     logger.info("=" * 70)
-    
-    # Configuration des signaux
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
     
     # Créer les dossiers de données
     os.makedirs("data/footbot", exist_ok=True)
     os.makedirs("data/sexbot", exist_ok=True)
+    os.makedirs("data/shared", exist_ok=True)
     logger.info("✅ Dossiers de données créés")
     
-    # Vérifier les tokens
-    footbot_token = os.environ.get("FOOTBOT_TOKEN")
-    sexbot_token = os.environ.get("SEXBOT_TOKEN")
+    # Vérification des tokens
+    footbot_token = os.environ.get("FOOTBOT_TOKEN", "")
+    sexbot_token = os.environ.get("SEXBOT_TOKEN", "")
     
-    if not footbot_token:
+    bots_to_run = []
+    
+    # Vérifier FootBot
+    if footbot_token and len(footbot_token) > 20:
+        logger.info("📋 Bot #1: ⚽ FootBot - Activé")
+        bots_to_run.append(("FootBot", run_footbot()))
+    else:
         logger.warning("⚠️ FOOTBOT_TOKEN manquant - FootBot désactivé")
-    if not sexbot_token:
+    
+    # Vérifier SexBot
+    if sexbot_token and len(sexbot_token) > 20:
+        logger.info("📋 Bot #2: 🔞 SexBot - Activé")
+        bots_to_run.append(("SexBot", run_sexbot()))
+    else:
         logger.warning("⚠️ SEXBOT_TOKEN manquant - SexBot désactivé")
     
-    if not footbot_token and not sexbot_token:
+    # Vérifier qu'au moins un bot est configuré
+    if not bots_to_run:
         logger.error("❌ Aucun token configuré!")
-        sys.exit(1)
+        logger.error("💡 Ajoutez FOOTBOT_TOKEN et/ou SEXBOT_TOKEN dans les variables d'environnement")
+        return
     
-    # Démarrer le serveur HTTP
-    logger.info("🌐 Démarrage serveur HTTP...")
-    http_thread = threading.Thread(target=start_http_server, daemon=False, name="HTTPServer")
+    logger.info("")
+    logger.info(f"🤖 {len(bots_to_run)} bot(s) configuré(s)")
+    logger.info("=" * 70)
+    logger.info("")
+    
+    # Démarrer le serveur HTTP en arrière-plan
+    http_thread = threading.Thread(target=start_http_server, daemon=True)
     http_thread.start()
+    logger.info("✅ Serveur HTTP lancé en arrière-plan")
+    logger.info("")
     
-    if not http_server_ready.wait(timeout=10):
-        logger.error("❌ Serveur HTTP non démarré")
-        sys.exit(1)
+    # Créer les tâches pour chaque bot
+    for bot_name, bot_coro in bots_to_run:
+        task = asyncio.create_task(bot_coro)
+        running_tasks.append(task)
     
-    logger.info("✅ Serveur HTTP opérationnel")
-    
-    # Lancer les bots
     try:
-        if footbot_token:
-            logger.info("=" * 70)
-            logger.info("🟢 Lancement FootBot...")
-            footbot_process = Process(target=run_footbot, name="FootBot")
-            footbot_process.start()
-            logger.info(f"✅ FootBot démarré (PID: {footbot_process.pid})")
-            time.sleep(2)  # Attendre un peu avant de lancer le suivant
+        # Attendre que toutes les tâches se terminent
+        await asyncio.gather(*running_tasks, return_exceptions=True)
         
-        if sexbot_token:
-            logger.info("=" * 70)
-            logger.info("🟢 Lancement SexBot...")
-            sexbot_process = Process(target=run_sexbot, name="SexBot")
-            sexbot_process.start()
-            logger.info(f"✅ SexBot démarré (PID: {sexbot_process.pid})")
+    except asyncio.CancelledError:
+        logger.info("⚠️ Arrêt demandé")
         
-        logger.info("=" * 70)
-        logger.info("✅ TOUS LES BOTS SONT ACTIFS")
-        logger.info("=" * 70)
-        logger.info("")
-        logger.info("📊 Monitoring:")
-        if footbot_token:
-            logger.info(f"   ⚽ FootBot: PID {footbot_process.pid}")
-        if sexbot_token:
-            logger.info(f"   🔞 SexBot: PID {sexbot_process.pid}")
-        logger.info(f"   🌐 HTTP Server: Port {os.environ.get('PORT', 8080)}")
-        logger.info("")
-        logger.info("🔄 Auto-restart activé")
-        logger.info("⏰ Vérification toutes les 10 secondes")
-        logger.info("=" * 70)
-        
-        # Surveiller et redémarrer les processus si nécessaire
-        restart_count = {'footbot': 0, 'sexbot': 0}
-        max_restarts = 3
-        
-        while True:
-            # Vérifier FootBot
-            if footbot_token and footbot_process:
-                if not footbot_process.is_alive():
-                    restart_count['footbot'] += 1
-                    if restart_count['footbot'] <= max_restarts:
-                        logger.error(f"❌ FootBot s'est arrêté! (Tentative {restart_count['footbot']}/{max_restarts})")
-                        logger.info("🔄 Redémarrage FootBot...")
-                        footbot_process = Process(target=run_footbot, name="FootBot")
-                        footbot_process.start()
-                        logger.info(f"✅ FootBot redémarré (PID: {footbot_process.pid})")
-                        time.sleep(5)
-                    else:
-                        logger.error("❌ FootBot: Trop de redémarrages, abandon")
-            
-            # Vérifier SexBot
-            if sexbot_token and sexbot_process:
-                if not sexbot_process.is_alive():
-                    restart_count['sexbot'] += 1
-                    if restart_count['sexbot'] <= max_restarts:
-                        logger.error(f"❌ SexBot s'est arrêté! (Tentative {restart_count['sexbot']}/{max_restarts})")
-                        logger.info("🔄 Redémarrage SexBot...")
-                        sexbot_process = Process(target=run_sexbot, name="SexBot")
-                        sexbot_process.start()
-                        logger.info(f"✅ SexBot redémarré (PID: {sexbot_process.pid})")
-                        time.sleep(5)
-                    else:
-                        logger.error("❌ SexBot: Trop de redémarrages, abandon")
-            
-            # Vérifier toutes les 10 secondes
-            time.sleep(10)
-            
-    except KeyboardInterrupt:
-        signal_handler(signal.SIGINT, None)
     except Exception as e:
-        logger.error(f"❌ Erreur fatale: {e}")
-        import traceback
-        traceback.print_exc()
-        signal_handler(signal.SIGTERM, None)
+        logger.error(f"❌ Erreur critique: {e}")
+        
+    finally:
+        # Annuler toutes les tâches restantes
+        logger.info("🛑 Arrêt de tous les bots...")
+        
+        for task in running_tasks:
+            if not task.done():
+                task.cancel()
+        
+        # Attendre que toutes les tâches soient bien annulées
+        await asyncio.gather(*running_tasks, return_exceptions=True)
+        
+        # Arrêter le serveur HTTP
+        stop_http_server()
+        
+        logger.info("✅ Tous les bots arrêtés proprement")
+
+# ============================================================================
+# POINT D'ENTRÉE
+# ============================================================================
 
 if __name__ == '__main__':
-    main()
+    # Configurer les gestionnaires de signaux
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    try:
+        # Lancer l'event loop asyncio
+        asyncio.run(main())
+        
+    except KeyboardInterrupt:
+        logger.info("👋 Arrêt propre du launcher (Ctrl+C)")
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur fatale: {e}")
+        sys.exit(1)
+        
+    finally:
+        logger.info("👋 Launcher terminé")

@@ -1310,15 +1310,13 @@ def main():
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
-            close_loop=False,
-            stop_signals=None
+            close_loop=False,  # Important pour multi-bot
+            stop_signals=None   # Désactive les signaux (géré par launcher)
         )
-    except KeyboardInterrupt:
-        logger.info("⚠️ Arrêt FootBot demandé par l'utilisateur")
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("⚠️ FootBot - Arrêt demandé")
     except Exception as e:
-        logger.error(f"❌ Erreur fatale FootBot: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"❌ Erreur FootBot: {e}")
     finally:
         logger.info("👋 FootBot arrêté proprement")
 

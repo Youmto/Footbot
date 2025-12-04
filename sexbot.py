@@ -1221,13 +1221,15 @@ def main():
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
-            close_loop=False,
-            stop_signals=None
+            close_loop=False,  # Important pour multi-bot
+            stop_signals=None   # Désactive les signaux (géré par launcher)
         )
-    except KeyboardInterrupt:
-        logger.info("⚠️ Arrêt demandé")
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("⚠️ SexBot - Arrêt demandé")
+    except Exception as e:
+        logger.error(f"❌ Erreur SexBot: {e}")
     finally:
-        logger.info("👋 SexBot arrêté")
+        logger.info("👋 SexBot arrêté proprement")
 
 if __name__ == '__main__':
     main()
