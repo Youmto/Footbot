@@ -1,14 +1,26 @@
+"""
+SEXBOT - Bot Telegram Contenu +18
+Version professionnelle avec gestion async correcte
+"""
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaVideo, InputMediaPhoto
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from telegram.error import TelegramError
-import json
 import os
-from datetime import datetime, timedelta
+import sys
+import json
 import asyncio
-from typing import List, Dict, Optional
-import time
 import hashlib
+from datetime import datetime
+from typing import List, Dict, Optional
+from pathlib import Path
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, 
+    CommandHandler, 
+    CallbackQueryHandler, 
+    MessageHandler, 
+    filters, 
+    ContextTypes
+)
 
 # ============================================================================
 # ⚙️ CONFIGURATION
@@ -18,21 +30,26 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sexbot")
 
-# Bot Configuration
-BOT_TOKEN = os.environ.get("SEXBOT_TOKEN", "8199257003:AAGmE2ny-3owDb9L_CKhtsZVkXDIhPPW1Y0")
-ADMIN_IDS = [int(x) for x in os.environ.get("SEXBOT_ADMIN_IDS", "5854095196").split(",")]
-CHANNEL_ID = os.environ.get("SEXBOT_CHANNEL_ID", "-1002415523895")
-REQUIRED_CHANNEL = os.environ.get("SEXBOT_REQUIRED_CHANNEL", "https://t.me/+mh1Ps_HZdQkzYjk0")
+# Configuration depuis les variables d'environnement
+BOT_TOKEN = os.environ.get("SEXBOT_TOKEN", "").strip()
+ADMIN_IDS = [
+    int(x.strip()) 
+    for x in os.environ.get("SEXBOT_ADMIN_IDS", "5854095196").split(",") 
+    if x.strip().isdigit()
+]
+CHANNEL_ID = os.environ.get("SEXBOT_CHANNEL_ID", "-1002415523895").strip()
+REQUIRED_CHANNEL = os.environ.get("SEXBOT_REQUIRED_CHANNEL", "https://t.me/+mh1Ps_HZdQkzYjk0").strip()
 
-# Files - Création du répertoire data/sexbot
-os.makedirs("data/sexbot", exist_ok=True)
-VIDEOS_FILE = "data/sexbot/videos_data.json"
-USERS_FILE = "data/sexbot/users_data.json"
-STATS_FILE = "data/sexbot/stats_data.json"
+# Fichiers de données
+DATA_DIR = Path("data/sexbot")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Categories
+VIDEOS_FILE = DATA_DIR / "videos_data.json"
+USERS_FILE = DATA_DIR / "users_data.json"
+
+# Catégories disponibles
 CATEGORIES = {
     'nude': {'name': 'Nude 🔞', 'icon': '🔞'},
     'buzz': {'name': 'Vidéo Buzz 🔥', 'icon': '🔥'},
@@ -46,113 +63,143 @@ CATEGORIES = {
     'other': {'name': 'Autre 📱', 'icon': '📱'}
 }
 
-# Variables globales
-admin_states = {}
+# État admin pour l'ajout de vidéos
+admin_states: Dict[int, dict] = {}
 
 # ============================================================================
-# 📦 DATA MANAGER
+# 📦 GESTIONNAIRE DE DONNÉES
 # ============================================================================
 
 class DataManager:
-    """Gestionnaire de données centralisé"""
+    """Gestionnaire de données centralisé avec cache"""
     
-    @staticmethod
-    def load_videos() -> List[Dict]:
-        if os.path.exists(VIDEOS_FILE):
-            try:
+    _videos_cache: Optional[List[Dict]] = None
+    _users_cache: Optional[Dict] = None
+    _cache_time: float = 0
+    _cache_duration: float = 60  # Durée du cache en secondes
+    
+    @classmethod
+    def _should_refresh_cache(cls) -> bool:
+        """Vérifie si le cache doit être rafraîchi"""
+        import time
+        return time.time() - cls._cache_time > cls._cache_duration
+    
+    @classmethod
+    def load_videos(cls) -> List[Dict]:
+        """Charge les vidéos depuis le fichier"""
+        if cls._videos_cache is not None and not cls._should_refresh_cache():
+            return cls._videos_cache
+        
+        try:
+            if VIDEOS_FILE.exists():
                 with open(VIDEOS_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except:
-                return []
-        return []
+                    cls._videos_cache = json.load(f)
+            else:
+                cls._videos_cache = []
+        except (json.JSONDecodeError, IOError) as e:
+            logger.error(f"Erreur chargement vidéos: {e}")
+            cls._videos_cache = []
+        
+        import time
+        cls._cache_time = time.time()
+        return cls._videos_cache
     
-    @staticmethod
-    def save_videos(videos: List[Dict]):
+    @classmethod
+    def save_videos(cls, videos: List[Dict]):
+        """Sauvegarde les vidéos"""
         try:
             with open(VIDEOS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(videos, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            logger.error(f"❌ Erreur sauvegarde vidéos: {e}")
+            cls._videos_cache = videos
+            import time
+            cls._cache_time = time.time()
+        except IOError as e:
+            logger.error(f"Erreur sauvegarde vidéos: {e}")
     
-    @staticmethod
-    def add_video(video_data: Dict) -> str:
-        videos = DataManager.load_videos()
+    @classmethod
+    def add_video(cls, video_data: Dict) -> str:
+        """Ajoute une nouvelle vidéo"""
+        videos = cls.load_videos()
         
+        # Générer un ID unique
         video_id = hashlib.md5(
             f"{video_data['file_id']}_{datetime.now().timestamp()}".encode()
         ).hexdigest()[:12]
         
-        video_data['id'] = video_id
-        video_data['created_at'] = datetime.now().isoformat()
-        video_data['views'] = 0
-        video_data['likes'] = 0
-        video_data['shares'] = 0
+        video_data.update({
+            'id': video_id,
+            'created_at': datetime.now().isoformat(),
+            'views': 0,
+            'likes': 0,
+            'shares': 0
+        })
         
         videos.insert(0, video_data)
-        DataManager.save_videos(videos)
+        cls.save_videos(videos)
         
+        logger.info(f"✅ Vidéo ajoutée: {video_id}")
         return video_id
     
-    @staticmethod
-    def delete_video(video_id: str) -> bool:
-        videos = DataManager.load_videos()
-        videos = [v for v in videos if v['id'] != video_id]
-        DataManager.save_videos(videos)
-        return True
-    
-    @staticmethod
-    def get_video(video_id: str) -> Optional[Dict]:
-        videos = DataManager.load_videos()
+    @classmethod
+    def get_video(cls, video_id: str) -> Optional[Dict]:
+        """Récupère une vidéo par ID"""
+        videos = cls.load_videos()
         return next((v for v in videos if v['id'] == video_id), None)
     
-    @staticmethod
-    def increment_view(video_id: str):
-        videos = DataManager.load_videos()
+    @classmethod
+    def delete_video(cls, video_id: str) -> bool:
+        """Supprime une vidéo"""
+        videos = cls.load_videos()
+        original_len = len(videos)
+        videos = [v for v in videos if v['id'] != video_id]
+        
+        if len(videos) < original_len:
+            cls.save_videos(videos)
+            logger.info(f"🗑️ Vidéo supprimée: {video_id}")
+            return True
+        return False
+    
+    @classmethod
+    def increment_stat(cls, video_id: str, stat: str):
+        """Incrémente une statistique (views, likes, shares)"""
+        videos = cls.load_videos()
         for video in videos:
             if video['id'] == video_id:
-                video['views'] = video.get('views', 0) + 1
-                DataManager.save_videos(videos)
+                video[stat] = video.get(stat, 0) + 1
+                cls.save_videos(videos)
                 break
     
-    @staticmethod
-    def increment_like(video_id: str):
-        videos = DataManager.load_videos()
-        for video in videos:
-            if video['id'] == video_id:
-                video['likes'] = video.get('likes', 0) + 1
-                DataManager.save_videos(videos)
-                break
-    
-    @staticmethod
-    def increment_share(video_id: str):
-        videos = DataManager.load_videos()
-        for video in videos:
-            if video['id'] == video_id:
-                video['shares'] = video.get('shares', 0) + 1
-                DataManager.save_videos(videos)
-                break
-    
-    @staticmethod
-    def load_users() -> Dict:
-        if os.path.exists(USERS_FILE):
-            try:
+    @classmethod
+    def load_users(cls) -> Dict:
+        """Charge les utilisateurs"""
+        if cls._users_cache is not None and not cls._should_refresh_cache():
+            return cls._users_cache
+        
+        try:
+            if USERS_FILE.exists():
                 with open(USERS_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except:
-                return {}
-        return {}
+                    cls._users_cache = json.load(f)
+            else:
+                cls._users_cache = {}
+        except (json.JSONDecodeError, IOError):
+            cls._users_cache = {}
+        
+        return cls._users_cache
     
-    @staticmethod
-    def save_users(users: Dict):
+    @classmethod
+    def save_users(cls, users: Dict):
+        """Sauvegarde les utilisateurs"""
         try:
             with open(USERS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(users, f, indent=2)
-        except Exception as e:
-            logger.error(f"❌ Erreur sauvegarde users: {e}")
+            cls._users_cache = users
+        except IOError as e:
+            logger.error(f"Erreur sauvegarde users: {e}")
     
-    @staticmethod
-    def register_user(user_id: int, username: str = None, first_name: str = None):
-        users = DataManager.load_users()
+    @classmethod
+    def register_user(cls, user_id: int, username: str = None, first_name: str = None) -> Dict:
+        """Enregistre ou met à jour un utilisateur"""
+        users = cls.load_users()
         user_key = str(user_id)
         
         if user_key not in users:
@@ -173,13 +220,14 @@ class DataManager:
             if first_name:
                 users[user_key]['first_name'] = first_name
         
-        DataManager.save_users(users)
+        cls.save_users(users)
         return users[user_key]
     
-    @staticmethod
-    def get_stats() -> Dict:
-        videos = DataManager.load_videos()
-        users = DataManager.load_users()
+    @classmethod
+    def get_stats(cls) -> Dict:
+        """Retourne les statistiques globales"""
+        videos = cls.load_videos()
+        users = cls.load_users()
         
         total_views = sum(v.get('views', 0) for v in videos)
         total_likes = sum(v.get('likes', 0) for v in videos)
@@ -200,25 +248,52 @@ class DataManager:
         }
 
 # ============================================================================
-# 🔐 VÉRIFICATION ABONNEMENT (OPTIONNEL)
+# 🔐 VÉRIFICATION ABONNEMENT
 # ============================================================================
 
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Vérifie l'abonnement au canal (OBLIGATOIRE)"""
+    """Vérifie si l'utilisateur est abonné au canal requis"""
     if not REQUIRED_CHANNEL or not CHANNEL_ID:
-        return False  # Pas de canal configuré = accès refusé
+        return False
     
     try:
         member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         return member.status in ['member', 'administrator', 'creator']
-    except:
-        return False  # En cas d'erreur, on refuse l'accès
+    except Exception as e:
+        logger.debug(f"Erreur vérification abonnement: {e}")
+        return False
+
+# ============================================================================
+# 🎨 GÉNÉRATEURS D'INTERFACE
+# ============================================================================
+
+def create_subscription_keyboard() -> InlineKeyboardMarkup:
+    """Crée le clavier pour l'abonnement"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔥 REJOINDRE LE GROUPE VIP", url=REQUIRED_CHANNEL)],
+        [InlineKeyboardButton("✅ J'ai rejoint !", callback_data="check_sub")]
+    ])
+
+
+def create_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
+    """Crée le clavier du menu principal"""
+    keyboard = [
+        [InlineKeyboardButton("🔥 VIDÉOS BUZZ", callback_data="popular")],
+        [InlineKeyboardButton("🔞 TOUTES LES CATÉGORIES", callback_data="categories")],
+        [InlineKeyboardButton("🆕 Derniers Ajouts", callback_data="latest")],
+        [InlineKeyboardButton("⭐ Mes Favoris", callback_data="favorites")],
+    ]
+    
+    if is_admin:
+        keyboard.append([InlineKeyboardButton("⚙️ ADMIN PANEL", callback_data="admin")])
+    
+    return InlineKeyboardMarkup(keyboard)
 
 # ============================================================================
 # 🤖 COMMANDES UTILISATEUR
 # ============================================================================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /start"""
     user = update.effective_user
     user_id = user.id
@@ -228,15 +303,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     is_admin = user_id in ADMIN_IDS
     
-    # Vérification abonnement OBLIGATOIRE (sauf pour les admins)
+    # Vérification abonnement (sauf admins)
     if not is_admin:
         is_sub = await check_subscription(user_id, context)
         if not is_sub:
-            keyboard = [
-                [InlineKeyboardButton("🔥 REJOINDRE LE GROUPE VIP", url=REQUIRED_CHANNEL)],
-                [InlineKeyboardButton("✅ J'ai rejoint !", callback_data="check_sub")]
-            ]
-            
             msg = (
                 "🔞 <b>CONTENU EXCLUSIF +18</b> 🔞\n\n"
                 f"👋 Salut <b>{user.first_name}</b> !\n\n"
@@ -257,30 +327,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             await update.message.reply_text(
-                msg, parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                msg, 
+                parse_mode='HTML',
+                reply_markup=create_subscription_keyboard()
             )
             return
     
     await show_main_menu(update, context)
 
+
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Menu principal"""
+    """Affiche le menu principal"""
     user_id = update.effective_user.id
     is_admin = user_id in ADMIN_IDS
     
-    videos = DataManager.load_videos()
     stats = DataManager.get_stats()
-    
-    keyboard = [
-        [InlineKeyboardButton("🔥 VIDÉOS BUZZ", callback_data="popular")],
-        [InlineKeyboardButton("🔞 TOUTES LES CATÉGORIES", callback_data="categories")],
-        [InlineKeyboardButton("🆕 Derniers Ajouts", callback_data="latest")],
-        [InlineKeyboardButton("⭐ Mes Favoris", callback_data="favorites")],
-    ]
-    
-    if is_admin:
-        keyboard.append([InlineKeyboardButton("⚙️ ADMIN PANEL", callback_data="admin")])
     
     msg = (
         "🔞 <b>CONTENU EXCLUSIF +18</b> 🔞\n\n"
@@ -293,25 +354,28 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👇 <b>Que veux-tu regarder ?</b>"
     )
     
+    keyboard = create_main_menu_keyboard(is_admin)
+    
     if hasattr(update, 'callback_query') and update.callback_query:
         try:
             await update.callback_query.edit_message_text(
-                msg, parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                msg, parse_mode='HTML', reply_markup=keyboard
             )
-        except:
+        except Exception:
             await update.callback_query.message.reply_text(
-                msg, parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                msg, parse_mode='HTML', reply_markup=keyboard
             )
     else:
         await update.message.reply_text(
-            msg, parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            msg, parse_mode='HTML', reply_markup=keyboard
         )
 
+# ============================================================================
+# 📂 NAVIGATION CATÉGORIES
+# ============================================================================
+
 async def show_categories(query):
-    """Affiche les catégories"""
+    """Affiche les catégories disponibles"""
     await query.answer()
     
     stats = DataManager.get_stats()
@@ -319,7 +383,7 @@ async def show_categories(query):
     
     keyboard = []
     
-    # Catégories principales en premier
+    # Catégories prioritaires
     priority_cats = ['nude', 'buzz', 'pornhub', 'onlyfans', 'celebrity', 'leaked']
     
     for cat_key in priority_cats:
@@ -360,6 +424,7 @@ async def show_categories(query):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def show_videos_by_category(query, category: str):
     """Affiche les vidéos d'une catégorie"""
     await query.answer()
@@ -370,7 +435,7 @@ async def show_videos_by_category(query, category: str):
     if not cat_videos:
         keyboard = [[InlineKeyboardButton("🔙 Catégories", callback_data="categories")]]
         await query.edit_message_text(
-            f"❌ Aucune vidéo dans cette catégorie",
+            "❌ Aucune vidéo dans cette catégorie",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -405,6 +470,10 @@ async def show_videos_by_category(query, category: str):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# ============================================================================
+# 📹 AFFICHAGE VIDÉOS
+# ============================================================================
+
 async def show_popular_videos(query):
     """Affiche les vidéos populaires"""
     await query.answer()
@@ -436,16 +505,14 @@ async def show_popular_videos(query):
     
     keyboard.append([InlineKeyboardButton("🔙 Menu", callback_data="main_menu")])
     
-    msg = (
-        "🔥 <b>VIDÉOS POPULAIRES</b>\n\n"
-        f"📊 Top {len(popular)} vidéos\n\n"
-        "👇 Sélectionne une vidéo:"
-    )
-    
     await query.edit_message_text(
-        msg, parse_mode='HTML',
+        f"🔥 <b>VIDÉOS POPULAIRES</b>\n\n"
+        f"📊 Top {len(popular)} vidéos\n\n"
+        "👇 Sélectionne une vidéo:",
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def show_latest_videos(query):
     """Affiche les dernières vidéos"""
@@ -464,7 +531,6 @@ async def show_latest_videos(query):
     
     keyboard = []
     for video in videos:
-        cat_info = CATEGORIES.get(video.get('category', 'other'), {'icon': '📱'})
         title = video.get('title', 'Sans titre')[:40]
         keyboard.append([
             InlineKeyboardButton(
@@ -475,19 +541,17 @@ async def show_latest_videos(query):
     
     keyboard.append([InlineKeyboardButton("🔙 Menu", callback_data="main_menu")])
     
-    msg = (
-        "🆕 <b>DERNIÈRES VIDÉOS</b>\n\n"
-        f"📱 {len(videos)} nouvelle(s) vidéo(s)\n\n"
-        "👇 Sélectionne une vidéo:"
-    )
-    
     await query.edit_message_text(
-        msg, parse_mode='HTML',
+        f"🆕 <b>DERNIÈRES VIDÉOS</b>\n\n"
+        f"📱 {len(videos)} nouvelle(s) vidéo(s)\n\n"
+        "👇 Sélectionne une vidéo:",
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def watch_video(query, video_id: str):
-    """Affiche une vidéo"""
+    """Affiche et lit une vidéo"""
     video = DataManager.get_video(video_id)
     
     if not video:
@@ -497,7 +561,7 @@ async def watch_video(query, video_id: str):
     await query.answer()
     
     # Incrémenter les vues
-    DataManager.increment_view(video_id)
+    DataManager.increment_stat(video_id, 'views')
     
     # Mettre à jour les stats utilisateur
     user_id = str(query.from_user.id)
@@ -508,15 +572,14 @@ async def watch_video(query, video_id: str):
     
     cat_info = CATEGORIES.get(video.get('category', 'other'), {'icon': '📱', 'name': 'Autre'})
     
-    # Vérifier si dans les favoris
-    users = DataManager.load_users()
+    # Vérifier favoris
     user_favs = users.get(user_id, {}).get('favorites', [])
     is_fav = video_id in user_favs
     
     keyboard = [
         [
             InlineKeyboardButton("❤️ J'aime", callback_data=f"like_{video_id}"),
-            InlineKeyboardButton("💔 Dislike" if is_fav else "⭐ Favoris", callback_data=f"fav_{video_id}")
+            InlineKeyboardButton("💔 Retirer" if is_fav else "⭐ Favoris", callback_data=f"fav_{video_id}")
         ],
         [
             InlineKeyboardButton("📤 Partager", callback_data=f"share_{video_id}"),
@@ -537,10 +600,8 @@ async def watch_video(query, video_id: str):
         caption += f"\n📝 {video['description']}"
     
     try:
-        # Supprimer le message précédent
         await query.message.delete()
         
-        # Envoyer la vidéo
         if video.get('type') == 'photo':
             await query.message.reply_photo(
                 photo=video['file_id'],
@@ -556,19 +617,26 @@ async def watch_video(query, video_id: str):
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
     except Exception as e:
-        logger.error(f"❌ Erreur envoi vidéo: {e}")
+        logger.error(f"Erreur envoi vidéo: {e}")
         await query.message.reply_text(
             "❌ Erreur lors du chargement de la vidéo",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Menu", callback_data="main_menu")]])
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 Menu", callback_data="main_menu")
+            ]])
         )
+
+# ============================================================================
+# 👍 INTERACTIONS VIDÉO
+# ============================================================================
 
 async def like_video(query, video_id: str):
     """Like une vidéo"""
-    DataManager.increment_like(video_id)
+    DataManager.increment_stat(video_id, 'likes')
     await query.answer("❤️ Merci pour ton like !")
 
+
 async def toggle_favorite(query, video_id: str):
-    """Toggle favori"""
+    """Ajoute/retire des favoris"""
     user_id = str(query.from_user.id)
     users = DataManager.load_users()
     
@@ -587,9 +655,10 @@ async def toggle_favorite(query, video_id: str):
     
     DataManager.save_users(users)
 
+
 async def share_video(query, video_id: str):
-    """Partager une vidéo"""
-    DataManager.increment_share(video_id)
+    """Partage une vidéo"""
+    DataManager.increment_stat(video_id, 'shares')
     
     video = DataManager.get_video(video_id)
     if video:
@@ -601,16 +670,19 @@ async def share_video(query, video_id: str):
             [InlineKeyboardButton("🔙 Retour", callback_data=f"watch_{video_id}")]
         ]
         
-        await query.edit_message_text(
-            f"📤 <b>PARTAGER CETTE VIDÉO</b>\n\n"
-            f"🔗 Lien: <code>{share_url}</code>\n\n"
-            "👇 Clique pour partager:",
+        await query.edit_message_caption(
+            caption=(
+                f"📤 <b>PARTAGER CETTE VIDÉO</b>\n\n"
+                f"🔗 Lien: <code>{share_url}</code>\n\n"
+                "👇 Clique pour partager:"
+            ),
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+
 async def show_video_stats(query, video_id: str):
-    """Statistiques vidéo"""
+    """Affiche les statistiques d'une vidéo"""
     video = DataManager.get_video(video_id)
     
     if not video:
@@ -622,23 +694,23 @@ async def show_video_stats(query, video_id: str):
     
     keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data=f"watch_{video_id}")]]
     
-    msg = (
-        f"📊 <b>STATISTIQUES</b>\n\n"
-        f"📝 <b>{video.get('title', 'Sans titre')}</b>\n\n"
-        f"📂 Catégorie: {cat_info['name']}\n"
-        f"📅 Ajoutée: {created}\n"
-        f"👁️ Vues: <b>{video.get('views', 0)}</b>\n"
-        f"❤️ J'aime: <b>{video.get('likes', 0)}</b>\n"
-        f"📤 Partages: <b>{video.get('shares', 0)}</b>\n"
-    )
-    
-    await query.edit_message_text(
-        msg, parse_mode='HTML',
+    await query.edit_message_caption(
+        caption=(
+            f"📊 <b>STATISTIQUES</b>\n\n"
+            f"📝 <b>{video.get('title', 'Sans titre')}</b>\n\n"
+            f"📂 Catégorie: {cat_info['name']}\n"
+            f"📅 Ajoutée: {created}\n"
+            f"👁️ Vues: <b>{video.get('views', 0)}</b>\n"
+            f"❤️ J'aime: <b>{video.get('likes', 0)}</b>\n"
+            f"📤 Partages: <b>{video.get('shares', 0)}</b>\n"
+        ),
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def show_favorites(query):
-    """Affiche les favoris"""
+    """Affiche les favoris de l'utilisateur"""
     await query.answer()
     
     user_id = str(query.from_user.id)
@@ -661,7 +733,6 @@ async def show_favorites(query):
     
     keyboard = []
     for video in fav_videos[:20]:
-        cat_info = CATEGORIES.get(video.get('category', 'other'), {'icon': '📱'})
         title = video.get('title', 'Sans titre')[:40]
         keyboard.append([
             InlineKeyboardButton(
@@ -672,23 +743,20 @@ async def show_favorites(query):
     
     keyboard.append([InlineKeyboardButton("🔙 Menu", callback_data="main_menu")])
     
-    msg = (
-        "⭐ <b>MES FAVORIS</b>\n\n"
-        f"📱 {len(fav_videos)} vidéo(s)\n\n"
-        "👇 Sélectionne une vidéo:"
-    )
-    
     await query.edit_message_text(
-        msg, parse_mode='HTML',
+        f"⭐ <b>MES FAVORIS</b>\n\n"
+        f"📱 {len(fav_videos)} vidéo(s)\n\n"
+        "👇 Sélectionne une vidéo:",
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 # ============================================================================
-# 🔧 PANEL ADMIN
+# ⚙️ PANEL ADMIN
 # ============================================================================
 
 async def admin_panel(query):
-    """Panel admin principal"""
+    """Panel administrateur"""
     if query.from_user.id not in ADMIN_IDS:
         await query.answer("❌ Accès refusé", show_alert=True)
         return
@@ -705,20 +773,18 @@ async def admin_panel(query):
         [InlineKeyboardButton("🔙 Menu", callback_data="main_menu")]
     ]
     
-    msg = (
-        "⚙️ <b>PANEL ADMIN</b>\n\n"
+    await query.edit_message_text(
+        f"⚙️ <b>PANEL ADMIN</b>\n\n"
         f"📱 Vidéos: <b>{stats['total_videos']}</b>\n"
         f"👥 Users: <b>{stats['total_users']}</b>\n"
         f"👁️ Vues: <b>{stats['total_views']}</b>\n"
         f"❤️ Likes: <b>{stats['total_likes']}</b>\n"
         f"📤 Partages: <b>{stats['total_shares']}</b>\n\n"
-        "👇 Que veux-tu faire ?"
-    )
-    
-    await query.edit_message_text(
-        msg, parse_mode='HTML',
+        "👇 Que veux-tu faire ?",
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def admin_add_video(query):
     """Démarrer l'ajout d'une vidéo"""
@@ -731,19 +797,17 @@ async def admin_add_video(query):
     
     keyboard = [[InlineKeyboardButton("❌ Annuler", callback_data="admin")]]
     
-    msg = (
+    await query.edit_message_text(
         "➕ <b>AJOUTER UNE VIDÉO</b>\n\n"
         "📹 Envoie-moi la vidéo ou photo\n\n"
         "💡 Tu pourras ensuite:\n"
         "• Ajouter un titre\n"
         "• Choisir une catégorie\n"
-        "• Ajouter une description"
-    )
-    
-    await query.edit_message_text(
-        msg, parse_mode='HTML',
+        "• Ajouter une description",
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gère l'upload de vidéo par l'admin"""
@@ -755,7 +819,6 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
     if user_id not in admin_states or admin_states[user_id].get('state') != 'waiting_video':
         return
     
-    # Récupérer la vidéo ou photo
     if update.message.video:
         file_id = update.message.video.file_id
         media_type = 'video'
@@ -775,11 +838,12 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = [[InlineKeyboardButton("❌ Annuler", callback_data="admin")]]
     
     await update.message.reply_text(
-        "✅ <b>Vidéo reçue !</b>\n\n"
+        "✅ <b>Média reçu !</b>\n\n"
         "📝 Maintenant, envoie le <b>titre</b>:",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def handle_admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gère les textes de l'admin"""
@@ -815,7 +879,6 @@ async def handle_admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif state == 'waiting_description':
         state_data['description'] = update.message.text
         
-        # Sauvegarder la vidéo
         video_data = {
             'file_id': state_data['file_id'],
             'type': state_data['type'],
@@ -841,6 +904,7 @@ async def handle_admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
 
 async def admin_select_category(query, category: str):
     """Sélection de catégorie par l'admin"""
@@ -868,6 +932,7 @@ async def admin_select_category(query, category: str):
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def admin_skip_description(query):
     """Passer la description"""
@@ -900,11 +965,11 @@ async def admin_skip_description(query):
     
     await query.edit_message_text(
         "✅ <b>VIDÉO PUBLIÉE !</b>\n\n"
-        "🎉 La vidéo est maintenant visible\n"
-        "📊 Disponible dans le bot",
+        "🎉 La vidéo est maintenant visible",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def admin_manage_videos(query):
     """Gérer les vidéos"""
@@ -944,6 +1009,7 @@ async def admin_manage_videos(query):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def admin_edit_video(query, video_id: str):
     """Éditer une vidéo"""
     if query.from_user.id not in ADMIN_IDS:
@@ -964,19 +1030,17 @@ async def admin_edit_video(query, video_id: str):
     
     cat_info = CATEGORIES.get(video.get('category', 'other'), {'name': 'Autre'})
     
-    msg = (
+    await query.edit_message_text(
         f"✏️ <b>ÉDITER VIDÉO</b>\n\n"
         f"📝 {video.get('title', 'Sans titre')}\n"
         f"📂 {cat_info['name']}\n"
         f"👁️ {video.get('views', 0)} vues\n"
         f"❤️ {video.get('likes', 0)} likes\n\n"
-        "👇 Que veux-tu faire ?"
-    )
-    
-    await query.edit_message_text(
-        msg, parse_mode='HTML',
+        "👇 Que veux-tu faire ?",
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def admin_delete_video(query, video_id: str):
     """Supprimer une vidéo"""
@@ -999,6 +1063,7 @@ async def admin_delete_video(query, video_id: str):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def admin_show_stats(query):
     """Statistiques détaillées"""
     if query.from_user.id not in ADMIN_IDS:
@@ -1009,7 +1074,6 @@ async def admin_show_stats(query):
     stats = DataManager.get_stats()
     videos = DataManager.load_videos()
     
-    # Top 5 vidéos
     top_videos = sorted(videos, key=lambda x: x.get('views', 0), reverse=True)[:5]
     
     msg = "📊 <b>STATISTIQUES DÉTAILLÉES</b>\n\n"
@@ -1031,6 +1095,7 @@ async def admin_show_stats(query):
         msg, parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 async def admin_show_users(query):
     """Liste des utilisateurs"""
@@ -1065,25 +1130,20 @@ async def admin_show_users(query):
     )
 
 # ============================================================================
-# 🎯 CALLBACK HANDLER
+# 🎯 CALLBACK HANDLER PRINCIPAL
 # ============================================================================
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gestionnaire de callbacks"""
+    """Gestionnaire principal des callbacks"""
     query = update.callback_query
     data = query.data
     user_id = query.from_user.id
     
-    # Vérification abonnement OBLIGATOIRE (sauf pour admin et check_sub)
+    # Vérification abonnement (sauf admin et check_sub)
     if user_id not in ADMIN_IDS and data != "check_sub":
         is_sub = await check_subscription(user_id, context)
         if not is_sub:
             await query.answer("🔒 Tu dois rejoindre le groupe pour accéder au contenu !", show_alert=True)
-            
-            keyboard = [
-                [InlineKeyboardButton("🔥 REJOINDRE LE GROUPE VIP", url=REQUIRED_CHANNEL)],
-                [InlineKeyboardButton("✅ J'ai rejoint !", callback_data="check_sub")]
-            ]
             
             try:
                 await query.edit_message_text(
@@ -1092,12 +1152,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "pour accéder au contenu exclusif +18\n\n"
                     "👇 Clique ci-dessous:",
                     parse_mode='HTML',
-                    reply_markup=InlineKeyboardMarkup(keyboard)
+                    reply_markup=create_subscription_keyboard()
                 )
-            except:
+            except Exception:
                 pass
             return
     
+    # Router les callbacks
     if data == "check_sub":
         is_sub = await check_subscription(user_id, context)
         if is_sub:
@@ -1122,28 +1183,22 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_favorites(query)
     
     elif data.startswith("cat_"):
-        category = data.split("_", 1)[1]
-        await show_videos_by_category(query, category)
+        await show_videos_by_category(query, data.split("_", 1)[1])
     
     elif data.startswith("watch_"):
-        video_id = data.split("_", 1)[1]
-        await watch_video(query, video_id)
+        await watch_video(query, data.split("_", 1)[1])
     
     elif data.startswith("like_"):
-        video_id = data.split("_", 1)[1]
-        await like_video(query, video_id)
+        await like_video(query, data.split("_", 1)[1])
     
     elif data.startswith("fav_"):
-        video_id = data.split("_", 1)[1]
-        await toggle_favorite(query, video_id)
+        await toggle_favorite(query, data.split("_", 1)[1])
     
     elif data.startswith("share_"):
-        video_id = data.split("_", 1)[1]
-        await share_video(query, video_id)
+        await share_video(query, data.split("_", 1)[1])
     
     elif data.startswith("stats_"):
-        video_id = data.split("_", 1)[1]
-        await show_video_stats(query, video_id)
+        await show_video_stats(query, data.split("_", 1)[1])
     
     # Admin callbacks
     elif data == "admin":
@@ -1162,74 +1217,108 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await admin_show_users(query)
     
     elif data.startswith("addcat_"):
-        category = data.split("_", 1)[1]
-        await admin_select_category(query, category)
+        await admin_select_category(query, data.split("_", 1)[1])
     
     elif data == "admin_skip_desc":
         await admin_skip_description(query)
     
     elif data.startswith("admin_edit_"):
-        video_id = data.split("_", 2)[2]
-        await admin_edit_video(query, video_id)
+        await admin_edit_video(query, data.split("_", 2)[2])
     
     elif data.startswith("admin_del_"):
-        video_id = data.split("_", 2)[2]
-        await admin_delete_video(query, video_id)
+        await admin_delete_video(query, data.split("_", 2)[2])
 
 # ============================================================================
-# 🚀 MAIN
+# 🚀 MAIN - POINT D'ENTRÉE COMPATIBLE MULTI-BOT
 # ============================================================================
 
 def main():
+    """
+    Point d'entrée principal - compatible avec le launcher multi-bot.
+    Cette fonction est appelée dans un thread avec sa propre boucle asyncio.
+    """
     logger.info("=" * 60)
-    logger.info("🔥 SEXBOT - DÉMARRAGE (Mode Multi-Bot)")
+    logger.info("🔞 SEXBOT - DÉMARRAGE")
     logger.info("=" * 60)
     
     if not BOT_TOKEN or len(BOT_TOKEN) < 20:
         logger.error("❌ SEXBOT_TOKEN invalide!")
-        sys.exit(1)
+        return
     
-    logger.info("✅ SexBot en mode multi-bot (pas de serveur HTTP propre)")
+    logger.info(f"👮 Admins: {ADMIN_IDS}")
+    logger.info(f"📢 Canal requis: {REQUIRED_CHANNEL}")
+    logger.info("")
     
     # Créer l'application
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Handlers
-    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CallbackQueryHandler(callback_handler))
     application.add_handler(MessageHandler(filters.VIDEO | filters.PHOTO, handle_video_upload))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_text))
     
-    logger.info("✅ SexBot configuré")
-    logger.info("")
-    logger.info("📱 FONCTIONNALITÉS:")
-    logger.info("   ✅ Contenu exclusif +18")
-    logger.info("   ✅ 10 catégories (Nude, Buzz, Pornhub, etc.)")
-    logger.info("   ✅ Système de likes/favoris")
-    logger.info("   ✅ Statistiques complètes")
-    logger.info("   ✅ Panel admin complet")
-    logger.info("   ✅ Upload vidéo/photo simple")
-    logger.info("   ✅ Accès OBLIGATOIRE via groupe VIP")
-    logger.info("")
-    logger.info("🔞 CATÉGORIES:")
-    for key, info in CATEGORIES.items():
-        logger.info(f"   {info['icon']} {info['name']}")
-    logger.info("")
+    logger.info("✅ Handlers configurés")
     logger.info("🚀 Démarrage du polling...")
     
     try:
+        # run_polling gère sa propre boucle d'événements
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
-            close_loop=False,  # Important pour multi-bot
-            stop_signals=None   # Désactive les signaux (géré par launcher)
+            close_loop=False,
+            stop_signals=None  # Désactivé car géré par le launcher
         )
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("⚠️ SexBot - Arrêt demandé")
     except Exception as e:
-        logger.error(f"❌ Erreur SexBot: {e}")
+        logger.error(f"❌ Erreur: {e}")
+        raise
     finally:
-        logger.info("👋 SexBot arrêté proprement")
+        logger.info("👋 SexBot arrêté")
+
+
+# Version async pour le nouveau launcher
+async def main_async():
+    """
+    Version async du point d'entrée.
+    Utilisée par le launcher pour une meilleure gestion des boucles async.
+    """
+    logger.info("=" * 60)
+    logger.info("🔞 SEXBOT - DÉMARRAGE (Async)")
+    logger.info("=" * 60)
+    
+    if not BOT_TOKEN or len(BOT_TOKEN) < 20:
+        logger.error("❌ SEXBOT_TOKEN invalide!")
+        return
+    
+    logger.info(f"👮 Admins: {ADMIN_IDS}")
+    logger.info(f"📢 Canal requis: {REQUIRED_CHANNEL}")
+    
+    # Créer l'application
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Handlers
+    application.add_handler(CommandHandler("start", cmd_start))
+    application.add_handler(CallbackQueryHandler(callback_handler))
+    application.add_handler(MessageHandler(filters.VIDEO | filters.PHOTO, handle_video_upload))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_text))
+    
+    logger.info("✅ Handlers configurés")
+    logger.info("🚀 Démarrage du polling async...")
+    
+    # Initialiser et démarrer
+    async with application:
+        await application.start()
+        await application.updater.start_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True
+        )
+        
+        logger.info("✅ SexBot actif et en écoute")
+        
+        # Garder le bot actif indéfiniment
+        while True:
+            await asyncio.sleep(3600)  # Sleep 1 heure
+
 
 if __name__ == '__main__':
     main()

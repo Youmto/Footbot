@@ -1,19 +1,27 @@
-# Python Telegram Bot
+# ============================================================================
+# MULTI-BOT TELEGRAM - DÉPENDANCES
+# ============================================================================
+
+# Python Telegram Bot (version stable avec asyncio)
 python-telegram-bot==21.0
 
 # Requêtes HTTP
 requests==2.31.0
 aiohttp==3.9.1
 
-# Parsing HTML (pour FootBot)
+# Parsing HTML (pour scraping football)
 beautifulsoup4==4.12.2
 lxml==4.9.3
 
 # Gestion des dates
 python-dateutil==2.8.2
 
-# Support asyncio amélioré
-asyncio==3.4.3
-
-# Utilitaires
+# Timezone
 pytz==2024.1
+
+# Utilitaires async (optionnel mais recommandé)
+# Note: asyncio est inclus dans Python 3.7+, pas besoin de l'installer
+
+# Pour les tests (optionnel)
+# pytest==7.4.0
+# pytest-asyncio==0.21.1
