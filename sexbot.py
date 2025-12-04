@@ -105,16 +105,37 @@ class DataManager:
         return cls._videos_cache
     
     @classmethod
-    def save_videos(cls, videos: List[Dict]):
-        """Sauvegarde les vidéos"""
+    def save_videos(cls, videos: List[Dict], trigger_backup: bool = True):
+        """Sauvegarde les vidéos et déclenche un backup"""
         try:
             with open(VIDEOS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(videos, f, indent=2, ensure_ascii=False)
             cls._videos_cache = videos
             import time
             cls._cache_time = time.time()
+            
+            # ⭐ DÉCLENCHER LE BACKUP AUTOMATIQUEMENT
+            if trigger_backup:
+                cls._trigger_backup()
+                
         except IOError as e:
             logger.error(f"Erreur sauvegarde vidéos: {e}")
+    
+    @classmethod
+    def _trigger_backup(cls):
+        """Déclenche un backup vers GitHub Gist"""
+        try:
+            from backup_manager import backup_manager
+            if backup_manager.enabled:
+                logger.info("💾 Backup déclenché après modification...")
+                if backup_manager.backup_all_bots():
+                    logger.info("✅ Backup réussi")
+                else:
+                    logger.warning("⚠️ Backup: rien à sauvegarder")
+        except ImportError:
+            logger.debug("Module backup_manager non disponible")
+        except Exception as e:
+            logger.error(f"❌ Erreur backup: {e}")
     
     @classmethod
     def add_video(cls, video_data: Dict) -> str:

@@ -134,14 +134,31 @@ class DataManager:
         return data
     
     @classmethod
-    def save_data(cls, data: Dict):
-        """Sauvegarde les données"""
+    def save_data(cls, data: Dict, trigger_backup: bool = False):
+        """Sauvegarde les données (backup uniquement pour modifications importantes)"""
         try:
             with open(DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             cls._data_cache = data
+            
+            # Backup uniquement si demandé (pas pour chaque MAJ auto)
+            if trigger_backup:
+                cls._trigger_backup()
+                
         except IOError as e:
             logger.error(f"Erreur sauvegarde données: {e}")
+    
+    @classmethod
+    def _trigger_backup(cls):
+        """Déclenche un backup vers GitHub Gist"""
+        try:
+            from backup_manager import backup_manager
+            if backup_manager.enabled:
+                backup_manager.backup_all_bots()
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.error(f"❌ Erreur backup: {e}")
     
     @classmethod
     def load_favorites(cls) -> Dict:
@@ -155,11 +172,16 @@ class DataManager:
         return {}
     
     @classmethod
-    def save_favorites(cls, favorites: Dict):
-        """Sauvegarde les favoris"""
+    def save_favorites(cls, favorites: Dict, trigger_backup: bool = True):
+        """Sauvegarde les favoris et déclenche un backup"""
         try:
             with open(FAVORITES_FILE, 'w', encoding='utf-8') as f:
                 json.dump(favorites, f, indent=2)
+            
+            # Backup après modification des favoris
+            if trigger_backup:
+                cls._trigger_backup()
+                
         except IOError as e:
             logger.error(f"Erreur sauvegarde favoris: {e}")
     
