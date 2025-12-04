@@ -74,14 +74,24 @@ async def run_footbot():
         # Import du module
         import footbot
         
-        # Créer une task pour exécuter le bot
-        loop = asyncio.get_event_loop()
+        # Lancer dans un processus séparé pour éviter les conflits d'event loop
+        import multiprocessing as mp
         
-        # Exécuter le main dans un thread séparé pour éviter les conflits d'event loop
-        await loop.run_in_executor(None, footbot.main)
+        # Créer un processus pour ce bot
+        process = mp.Process(target=footbot.main, name="FootBot")
+        process.start()
+        
+        # Attendre que le processus se termine
+        while process.is_alive():
+            await asyncio.sleep(1)
+        
+        logger.info("⚽ FootBot terminé")
         
     except asyncio.CancelledError:
         logger.info("⚽ FootBot arrêté (cancelled)")
+        if 'process' in locals() and process.is_alive():
+            process.terminate()
+            process.join(timeout=5)
         raise
     except Exception as e:
         logger.error(f"❌ Erreur FootBot: {e}")
@@ -95,14 +105,24 @@ async def run_sexbot():
         # Import du module
         import sexbot
         
-        # Créer une task pour exécuter le bot
-        loop = asyncio.get_event_loop()
+        # Lancer dans un processus séparé pour éviter les conflits d'event loop
+        import multiprocessing as mp
         
-        # Exécuter le main dans un thread séparé pour éviter les conflits d'event loop
-        await loop.run_in_executor(None, sexbot.main)
+        # Créer un processus pour ce bot
+        process = mp.Process(target=sexbot.main, name="SexBot")
+        process.start()
+        
+        # Attendre que le processus se termine
+        while process.is_alive():
+            await asyncio.sleep(1)
+        
+        logger.info("🔞 SexBot terminé")
         
     except asyncio.CancelledError:
         logger.info("🔞 SexBot arrêté (cancelled)")
+        if 'process' in locals() and process.is_alive():
+            process.terminate()
+            process.join(timeout=5)
         raise
     except Exception as e:
         logger.error(f"❌ Erreur SexBot: {e}")

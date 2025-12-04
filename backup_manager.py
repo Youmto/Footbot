@@ -15,8 +15,9 @@ class BackupManager:
     """Gestionnaire de backup vers GitHub Gist"""
     
     def __init__(self):
-        self.github_token = os.environ.get("GITHUB_BACKUP_TOKEN", "")
-        self.gist_id = os.environ.get("GIST_BACKUP_ID", "")
+        # Nettoyer les tokens (supprimer espaces, retours à la ligne, etc.)
+        self.github_token = os.environ.get("GITHUB_BACKUP_TOKEN", "").strip().replace("\n", "").replace("\r", "")
+        self.gist_id = os.environ.get("GIST_BACKUP_ID", "").strip().replace("\n", "").replace("\r", "")
         self.enabled = bool(self.github_token and self.gist_id)
         
         if not self.enabled:
