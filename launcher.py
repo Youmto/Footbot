@@ -2,13 +2,13 @@
 LAUNCHER MULTI-BOTS
 Gère plusieurs bots Telegram en parallèle
 """
-import asyncio
 import logging
 import os
 import sys
 import signal
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+import time
 
 # Configuration du logging
 logging.basicConfig(
@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 # Variables globales
 http_server = None
-running_tasks = []
-shutdown_event = asyncio.Event()
+bot_threads = []
+shutdown_flag = threading.Event()
 
 # ============================================================================
 # SERVEUR HTTP (HEALTH CHECK POUR RENDER)
@@ -66,67 +66,37 @@ def stop_http_server():
 # GESTION DES BOTS
 # ============================================================================
 
-async def run_footbot():
-    """Lance le bot Football"""
+def run_footbot():
+    """Lance le bot Football dans un thread"""
     try:
         logger.info("⚽ Démarrage de FootBot...")
         
-        # Import du module
+        # Import et lancement
         import footbot
+        footbot.main()
         
-        # Lancer dans un processus séparé pour éviter les conflits d'event loop
-        import multiprocessing as mp
-        
-        # Créer un processus pour ce bot
-        process = mp.Process(target=footbot.main, name="FootBot")
-        process.start()
-        
-        # Attendre que le processus se termine
-        while process.is_alive():
-            await asyncio.sleep(1)
-        
-        logger.info("⚽ FootBot terminé")
-        
-    except asyncio.CancelledError:
-        logger.info("⚽ FootBot arrêté (cancelled)")
-        if 'process' in locals() and process.is_alive():
-            process.terminate()
-            process.join(timeout=5)
-        raise
+    except KeyboardInterrupt:
+        logger.info("⚽ FootBot arrêté (interrupt)")
     except Exception as e:
         logger.error(f"❌ Erreur FootBot: {e}")
-        raise
+        import traceback
+        traceback.print_exc()
 
-async def run_sexbot():
-    """Lance le bot Sexbot"""
+def run_sexbot():
+    """Lance le bot Sexbot dans un thread"""
     try:
         logger.info("🔞 Démarrage de SexBot...")
         
-        # Import du module
+        # Import et lancement
         import sexbot
+        sexbot.main()
         
-        # Lancer dans un processus séparé pour éviter les conflits d'event loop
-        import multiprocessing as mp
-        
-        # Créer un processus pour ce bot
-        process = mp.Process(target=sexbot.main, name="SexBot")
-        process.start()
-        
-        # Attendre que le processus se termine
-        while process.is_alive():
-            await asyncio.sleep(1)
-        
-        logger.info("🔞 SexBot terminé")
-        
-    except asyncio.CancelledError:
-        logger.info("🔞 SexBot arrêté (cancelled)")
-        if 'process' in locals() and process.is_alive():
-            process.terminate()
-            process.join(timeout=5)
-        raise
+    except KeyboardInterrupt:
+        logger.info("🔞 SexBot arrêté (interrupt)")
     except Exception as e:
         logger.error(f"❌ Erreur SexBot: {e}")
-        raise
+        import traceback
+        traceback.print_exc()
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -135,25 +105,17 @@ async def run_sexbot():
 def signal_handler(signum, frame):
     """Gère les signaux d'arrêt proprement"""
     logger.info(f"⚠️ Signal {signum} reçu - Arrêt en cours...")
-    
-    # Marquer l'arrêt
-    shutdown_event.set()
-    
-    # Annuler toutes les tâches en cours
-    for task in running_tasks:
-        if not task.done():
-            task.cancel()
-    
-    # Arrêter le serveur HTTP
+    shutdown_flag.set()
     stop_http_server()
+    sys.exit(0)
 
 # ============================================================================
 # MAIN LAUNCHER
 # ============================================================================
 
-async def main():
+def main():
     """Lance tous les bots en parallèle"""
-    global running_tasks
+    global bot_threads
     
     logger.info("=" * 70)
     logger.info("🚀 MULTI-BOT LAUNCHER - DÉMARRAGE")
@@ -185,14 +147,14 @@ async def main():
     # Vérifier FootBot
     if footbot_token and len(footbot_token) > 20:
         logger.info("📋 Bot #1: ⚽ FootBot - Activé")
-        bots_to_run.append(("FootBot", run_footbot()))
+        bots_to_run.append(("FootBot", run_footbot))
     else:
         logger.warning("⚠️ FOOTBOT_TOKEN manquant - FootBot désactivé")
     
     # Vérifier SexBot
     if sexbot_token and len(sexbot_token) > 20:
         logger.info("📋 Bot #2: 🔞 SexBot - Activé")
-        bots_to_run.append(("SexBot", run_sexbot()))
+        bots_to_run.append(("SexBot", run_sexbot))
     else:
         logger.warning("⚠️ SEXBOT_TOKEN manquant - SexBot désactivé")
     
@@ -208,45 +170,35 @@ async def main():
     logger.info("")
     
     # Démarrer le serveur HTTP en arrière-plan
-    http_thread = threading.Thread(target=start_http_server, daemon=True)
+    http_thread = threading.Thread(target=start_http_server, daemon=True, name="HTTPServer")
     http_thread.start()
     logger.info("✅ Serveur HTTP lancé en arrière-plan")
     logger.info("")
     
-    # Créer les tâches pour chaque bot
-    for bot_name, bot_coro in bots_to_run:
-        task = asyncio.create_task(bot_coro)
-        running_tasks.append(task)
+    # Lancer chaque bot dans son propre thread
+    for bot_name, bot_func in bots_to_run:
+        thread = threading.Thread(target=bot_func, daemon=False, name=bot_name)
+        thread.start()
+        bot_threads.append(thread)
+        time.sleep(2)  # Petit délai entre chaque bot
     
     try:
-        # Attendre que toutes les tâches se terminent
-        await asyncio.gather(*running_tasks, return_exceptions=True)
+        # Attendre que tous les threads se terminent
+        for thread in bot_threads:
+            thread.join()
         
-    except asyncio.CancelledError:
-        logger.info("⚠️ Arrêt demandé")
-        
-    except Exception as e:
-        logger.error(f"❌ Erreur critique: {e}")
+    except KeyboardInterrupt:
+        logger.info("⚠️ Arrêt demandé (Ctrl+C)")
         
     finally:
-        # Annuler toutes les tâches restantes
-        logger.info("🛑 Arrêt de tous les bots...")
-        
-        # Sauvegarder les données avant l'arrêt
+        # Sauvegarder les données
+        logger.info("💾 Sauvegarde des données...")
         try:
             from backup_manager import backup_manager
-            logger.info("💾 Sauvegarde des données...")
             if backup_manager.backup_all_bots():
                 logger.info("✅ Données sauvegardées")
         except Exception as e:
             logger.error(f"❌ Erreur sauvegarde: {e}")
-        
-        for task in running_tasks:
-            if not task.done():
-                task.cancel()
-        
-        # Attendre que toutes les tâches soient bien annulées
-        await asyncio.gather(*running_tasks, return_exceptions=True)
         
         # Arrêter le serveur HTTP
         stop_http_server()
@@ -263,14 +215,15 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     
     try:
-        # Lancer l'event loop asyncio
-        asyncio.run(main())
+        main()
         
     except KeyboardInterrupt:
         logger.info("👋 Arrêt propre du launcher (Ctrl+C)")
         
     except Exception as e:
         logger.error(f"❌ Erreur fatale: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
         
     finally:
