@@ -26,6 +26,18 @@ from telegram.ext import (
 )
 from telegram.error import TelegramError
 
+
+
+# ============================================================================
+# ⚙️ CONFIGURATION
+# ============================================================================
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger("footbot")
+
 try:
     from prediction_module import (
         handle_prediction_request,
@@ -37,16 +49,6 @@ try:
 except ImportError as e:
     PREDICTIONS_ENABLED = False
     logger.warning(f"⚠️ Module prédictions non disponible: {e}")
-
-# ============================================================================
-# ⚙️ CONFIGURATION
-# ============================================================================
-
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger("footbot")
 
 # Configuration Bot
 BOT_TOKEN = os.environ.get("FOOTBOT_TOKEN", "").strip()
@@ -804,15 +806,6 @@ async def watch_match(query, match_id: str):
             ]])
         )
         return
-    keyboard = []
-
-    if PREDICTIONS_ENABLED:
-        keyboard.append([
-            InlineKeyboardButton(
-                "🔮 Analyse IA Complète (Corners, Cartons, Buts...)", 
-                callback_data=f"predict_{match_id}"
-            )
-        ])
     
     favorites = DataManager.load_favorites()
     user_id = str(query.from_user.id)
@@ -843,9 +836,19 @@ async def watch_match(query, match_id: str):
     iframe = match.get('iframe_url')
     streams = match.get('stream_urls', [])
     
-    # Construire le clavier
+    # ✅ CONSTRUIRE LE CLAVIER UNE SEULE FOIS
     keyboard = []
     
+    # Bouton prédiction IA en premier
+    if PREDICTIONS_ENABLED:
+        keyboard.append([
+            InlineKeyboardButton(
+                "🔮 Analyse IA Complète (Corners, Cartons, Buts...)", 
+                callback_data=f"predict_{match_id}"
+            )
+        ])
+    
+    # Boutons de lecture
     if iframe:
         keyboard.append([
             InlineKeyboardButton("📺 REGARDER DANS TELEGRAM", callback_data=f"embed_{match_id}")
@@ -864,6 +867,7 @@ async def watch_match(query, match_id: str):
             InlineKeyboardButton("🌐 Page du Match", url=match['page_url'])
         ])
     
+    # Boutons favoris et retour
     fav_text = "💔 Retirer des favoris" if is_fav else "⭐ Ajouter aux favoris"
     keyboard.append([InlineKeyboardButton(fav_text, callback_data=f"fav_{match_id}")])
     keyboard.append([InlineKeyboardButton("🔙 Retour", callback_data=f"sport_{match['sport'].lower()}")])

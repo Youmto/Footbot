@@ -696,13 +696,20 @@ async def show_sport_matches(query, sport_key: str):
     )
 
 async def watch_match(query, match_id: str):
+    """Affiche les détails d'un match"""
     await query.answer("⏳ Chargement...")
     
     data = DataManager.load_data()
     match = next((m for m in data['matches'] if m['id'] == match_id), None)
     
     if not match:
-        await query.edit_message_text("❌ Match introuvable", parse_mode='HTML')
+        await query.edit_message_text(
+            "❌ Match introuvable",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 Menu", callback_data="main_menu")
+            ]])
+        )
         return
     
     favorites = DataManager.load_favorites()
@@ -710,7 +717,8 @@ async def watch_match(query, match_id: str):
     user_favs = favorites.get(user_id, [])
     is_fav = match_id in user_favs
     
-    if not match.get('stream_urls') or not match.get('iframe_url'):
+    # Extraire les streams si pas encore fait
+    if not match.get('stream_urls') and not match.get('iframe_url'):
         await query.edit_message_text(
             "🔍 <b>EXTRACTION DES STREAMS...</b>\n\n"
             "⏳ Analyse en cours...\n"
@@ -718,11 +726,12 @@ async def watch_match(query, match_id: str):
             parse_mode='HTML'
         )
         
-        async with VIPRowUltraScraper() as scraper:
+        async with VIPRowScraper() as scraper:
             iframe, streams = await scraper.extract_stream_urls(match['page_url'], match_id)
             match['iframe_url'] = iframe
             match['stream_urls'] = streams
             
+            # Mettre à jour dans les données
             for i, m in enumerate(data['matches']):
                 if m['id'] == match_id:
                     data['matches'][i] = match
@@ -732,8 +741,19 @@ async def watch_match(query, match_id: str):
     iframe = match.get('iframe_url')
     streams = match.get('stream_urls', [])
     
+    # ✅ CONSTRUIRE LE CLAVIER UNE SEULE FOIS
     keyboard = []
     
+    # Bouton prédiction IA en premier
+    if PREDICTIONS_ENABLED:
+        keyboard.append([
+            InlineKeyboardButton(
+                "🔮 Analyse IA Complète (Corners, Cartons, Buts...)", 
+                callback_data=f"predict_{match_id}"
+            )
+        ])
+    
+    # Boutons de lecture
     if iframe:
         keyboard.append([
             InlineKeyboardButton("📺 REGARDER DANS TELEGRAM", callback_data=f"embed_{match_id}")
@@ -745,17 +765,19 @@ async def watch_match(query, match_id: str):
                 InlineKeyboardButton(f"🎬 Alternatives ({len(streams)-1})", callback_data=f"streams_{match_id}")
             ])
         keyboard.append([
-            InlineKeyboardButton("🌐 Navigateur", url=streams[0])
+            InlineKeyboardButton("🌐 Ouvrir dans Navigateur", url=streams[0])
         ])
     else:
         keyboard.append([
-            InlineKeyboardButton("🌐 Page Match", url=match['page_url'])
+            InlineKeyboardButton("🌐 Page du Match", url=match['page_url'])
         ])
     
-    fav_text = "💔 Retirer" if is_fav else "⭐ Favoris"
+    # Boutons favoris et retour
+    fav_text = "💔 Retirer des favoris" if is_fav else "⭐ Ajouter aux favoris"
     keyboard.append([InlineKeyboardButton(fav_text, callback_data=f"fav_{match_id}")])
     keyboard.append([InlineKeyboardButton("🔙 Retour", callback_data=f"sport_{match['sport'].lower()}")])
     
+    # Construire le message
     msg = (
         f"{match['sport_icon']} <b>{match['title']}</b>\n\n"
         f"🏆 {match['sport_name']}\n"
@@ -772,9 +794,9 @@ async def watch_match(query, match_id: str):
     elif streams:
         msg += f"✅ {len(streams)} stream(s) disponible(s)\n\n"
     else:
-        msg += "⚠️ Extraction en cours...\n\n"
+        msg += "⚠️ Streams en cours d'extraction...\n\n"
     
-    msg += "👇 <b>Choisissez:</b>"
+    msg += "👇 <b>Choisissez une option:</b>"
     
     await query.edit_message_text(
         msg, parse_mode='HTML',
