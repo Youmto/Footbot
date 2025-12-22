@@ -701,33 +701,22 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🎯 <b>Sélectionnez votre sport:</b>"
     )
     
-    keyboard = create_main_menu_keyboard(sports_count, user_id)
+    # ✅ UTILISER LA FONCTION create_main_menu_keyboard QUI RETOURNE DÉJÀ UN InlineKeyboardMarkup
+    keyboard_markup = create_main_menu_keyboard(sports_count, user_id)
     
     if hasattr(update, 'callback_query') and update.callback_query:
         try:
             await update.callback_query.edit_message_text(
-                msg, parse_mode='HTML', reply_markup=keyboard
+                msg, parse_mode='HTML', reply_markup=keyboard_markup
             )
         except Exception:
             await update.callback_query.message.reply_text(
-                msg, parse_mode='HTML', reply_markup=keyboard
+                msg, parse_mode='HTML', reply_markup=keyboard_markup
             )
     else:
         await update.message.reply_text(
-            msg, parse_mode='HTML', reply_markup=keyboard
+            msg, parse_mode='HTML', reply_markup=keyboard_markup
         )
-    keyboard.extend([
-        [InlineKeyboardButton("⭐ Mes Favoris", callback_data="favorites")],
-        [InlineKeyboardButton("🔄 Actualiser Tout", callback_data="refresh_all")]
-    ])
-    if PREDICTIONS_ENABLED:
-        keyboard.append([
-            InlineKeyboardButton("📊 Mes Prédictions IA", callback_data="prediction_stats")
-        ])
-    # ======================================================
-    
-    if user_id in ADMIN_IDS:
-        keyboard.append([InlineKeyboardButton("⚙️ Admin Panel", callback_data="admin")])
 
 # ============================================================================
 # 📺 AFFICHAGE MATCHS ET STREAMS
