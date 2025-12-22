@@ -26,6 +26,18 @@ from telegram.ext import (
 )
 from telegram.error import TelegramError
 
+try:
+    from prediction_module import (
+        handle_prediction_request,
+        show_user_prediction_stats,
+        PredictionsManager
+    )
+    PREDICTIONS_ENABLED = True
+    logger.info("✅ Module prédictions IA chargé")
+except ImportError as e:
+    PREDICTIONS_ENABLED = False
+    logger.warning(f"⚠️ Module prédictions non disponible: {e}")
+
 # ============================================================================
 # ⚙️ CONFIGURATION
 # ============================================================================
@@ -643,6 +655,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🏆 <b>VIPROW ULTIMATE PRO</b> 🏆\n\n"
             f"👋 Bienvenue <b>{user.first_name}</b> !\n\n"
             "🎯 <b>ACCÈS ILLIMITÉ À TOUS LES SPORTS HD</b>\n\n"
+            "🔮 <b>Prédictions IA (NOUVEAU!)</b>\n"  
+            "  • Résultat du match\n"                  
+            "  • Corners, Cartons\n"                   
+            "  • Score exact\n"                        
             "⚽ Football • 🥊 UFC/Boxing • 🤼 WWE\n"
             "🏈 NFL • 🏀 NBA • 🏒 NHL • 🎾 Tennis\n"
             "⛳ Golf • 🎯 Darts • 🏉 Rugby\n"
@@ -698,6 +714,18 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             msg, parse_mode='HTML', reply_markup=keyboard
         )
+    keyboard.extend([
+        [InlineKeyboardButton("⭐ Mes Favoris", callback_data="favorites")],
+        [InlineKeyboardButton("🔄 Actualiser Tout", callback_data="refresh_all")]
+    ])
+    if PREDICTIONS_ENABLED:
+        keyboard.append([
+            InlineKeyboardButton("📊 Mes Prédictions IA", callback_data="prediction_stats")
+        ])
+    # ======================================================
+    
+    if user_id in ADMIN_IDS:
+        keyboard.append([InlineKeyboardButton("⚙️ Admin Panel", callback_data="admin")])
 
 # ============================================================================
 # 📺 AFFICHAGE MATCHS ET STREAMS
@@ -776,6 +804,15 @@ async def watch_match(query, match_id: str):
             ]])
         )
         return
+    keyboard = []
+
+    if PREDICTIONS_ENABLED:
+        keyboard.append([
+            InlineKeyboardButton(
+                "🔮 Analyse IA Complète (Corners, Cartons, Buts...)", 
+                callback_data=f"predict_{match_id}"
+            )
+        ])
     
     favorites = DataManager.load_favorites()
     user_id = str(query.from_user.id)
@@ -1256,6 +1293,18 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("fav_"):
         match_id = data.split("_", 1)[1]
         await toggle_favorite(query, match_id)
+
+    if PREDICTIONS_ENABLED:
+        # Demande de prédiction
+        if data.startswith("predict_"):
+            match_id = data.split("_", 1)[1]
+            await handle_prediction_request(query, match_id, DataManager)
+            return
+        
+        # Statistiques de prédictions
+        elif data == "prediction_stats":
+            await show_user_prediction_stats(query)
+            return
 
 # ============================================================================
 # 🔄 TÂCHES DE FOND
