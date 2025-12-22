@@ -1,6 +1,14 @@
 """
-FOOTBOT - Bot Telegram Sports Streaming (VIPRow)
-Version professionnelle compatible multi-bot
+⚽ FOOTBOT ULTIMATE PRO V2.0 - Bot Telegram Sports Streaming
+═══════════════════════════════════════════════════════════════════════════════
+Version professionnelle avec:
+- Streaming multi-sports VIPRow
+- Prédictions IA Ultra-Avancées (Groq)
+- Votes communautaires & Gamification
+- Classements & Achievements
+- Système de favoris intelligent
+- Notifications push
+═══════════════════════════════════════════════════════════════════════════════
 """
 import logging
 import os
@@ -26,11 +34,9 @@ from telegram.ext import (
 )
 from telegram.error import TelegramError
 
-
-
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # ⚙️ CONFIGURATION
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -38,17 +44,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger("footbot")
 
+# Chargement du module de prédictions
 try:
-    from prediction_module import (
+    from prediction_module_v2 import (
         handle_prediction_request,
+        handle_vote,
+        show_community_votes,
         show_user_prediction_stats,
-        PredictionsManager
+        show_leaderboard,
+        show_prediction_history,
+        PredictionsManager,
+        AdvancedDataManager,
+        PREDICTIONS_ENABLED
     )
-    PREDICTIONS_ENABLED = True
-    logger.info("✅ Module prédictions IA chargé")
+    logger.info("✅ Module prédictions V2 chargé avec succès")
 except ImportError as e:
     PREDICTIONS_ENABLED = False
-    logger.warning(f"⚠️ Module prédictions non disponible: {e}")
+    logger.warning(f"⚠️ Module prédictions V2 non disponible: {e}")
+    
+    # Fallback sur l'ancien module
+    try:
+        from prediction_module import (
+            handle_prediction_request,
+            show_user_prediction_stats,
+            PredictionsManager
+        )
+        PREDICTIONS_ENABLED = True
+        logger.info("✅ Module prédictions V1 chargé (fallback)")
+    except ImportError:
+        PREDICTIONS_ENABLED = False
+        logger.warning("⚠️ Aucun module de prédictions disponible")
 
 # Configuration Bot
 BOT_TOKEN = os.environ.get("FOOTBOT_TOKEN", "").strip()
@@ -64,22 +89,22 @@ REQUIRED_CHANNEL = os.environ.get("FOOTBOT_REQUIRED_CHANNEL", "https://t.me/+mh1
 VIPROW_BASE = "https://www.viprow.nu"
 
 SPORTS_CONFIGURATION = {
-    'football': {'name': 'Football', 'icon': '⚽', 'url': f'{VIPROW_BASE}/sports-football-online'},
-    'ufc': {'name': 'UFC', 'icon': '🥊', 'url': f'{VIPROW_BASE}/sports-ufc-online'},
-    'boxing': {'name': 'Boxing', 'icon': '🥊', 'url': f'{VIPROW_BASE}/sports-boxing-online'},
-    'wwe': {'name': 'WWE', 'icon': '🤼', 'url': f'{VIPROW_BASE}/sports-wwe-online'},
-    'tennis': {'name': 'Tennis', 'icon': '🎾', 'url': f'{VIPROW_BASE}/sports-tennis-online'},
-    'nfl': {'name': 'NFL', 'icon': '🏈', 'url': f'{VIPROW_BASE}/sports-american-football-online'},
-    'nba': {'name': 'NBA', 'icon': '🏀', 'url': f'{VIPROW_BASE}/sports-basketball-online'},
-    'nhl': {'name': 'NHL', 'icon': '🏒', 'url': f'{VIPROW_BASE}/sports-ice-hockey-online'},
-    'golf': {'name': 'Golf', 'icon': '⛳', 'url': f'{VIPROW_BASE}/sports-golf-online'},
-    'darts': {'name': 'Darts', 'icon': '🎯', 'url': f'{VIPROW_BASE}/sports-darts-online'},
-    'rugby': {'name': 'Rugby', 'icon': '🏉', 'url': f'{VIPROW_BASE}/sports-rugby-online'},
-    'f1': {'name': 'Formula 1', 'icon': '🏎️', 'url': f'{VIPROW_BASE}/sports-formula-1-online'},
-    'motogp': {'name': 'MotoGP', 'icon': '🏍️', 'url': f'{VIPROW_BASE}/sports-moto-gp-online'},
-    'nascar': {'name': 'NASCAR', 'icon': '🏁', 'url': f'{VIPROW_BASE}/sports-nascar-online'},
-    'volleyball': {'name': 'Volleyball', 'icon': '🏐', 'url': f'{VIPROW_BASE}/sports-volleyball-online'},
-    'other': {'name': 'Other Sports', 'icon': '🎯', 'url': f'{VIPROW_BASE}/sports-others-online'}
+    'football': {'name': 'Football', 'icon': '⚽', 'url': f'{VIPROW_BASE}/sports-football-online', 'popular': True},
+    'ufc': {'name': 'UFC', 'icon': '🥊', 'url': f'{VIPROW_BASE}/sports-ufc-online', 'popular': True},
+    'boxing': {'name': 'Boxing', 'icon': '🥊', 'url': f'{VIPROW_BASE}/sports-boxing-online', 'popular': True},
+    'wwe': {'name': 'WWE', 'icon': '🤼', 'url': f'{VIPROW_BASE}/sports-wwe-online', 'popular': False},
+    'tennis': {'name': 'Tennis', 'icon': '🎾', 'url': f'{VIPROW_BASE}/sports-tennis-online', 'popular': True},
+    'nfl': {'name': 'NFL', 'icon': '🏈', 'url': f'{VIPROW_BASE}/sports-american-football-online', 'popular': True},
+    'nba': {'name': 'NBA', 'icon': '🏀', 'url': f'{VIPROW_BASE}/sports-basketball-online', 'popular': True},
+    'nhl': {'name': 'NHL', 'icon': '🏒', 'url': f'{VIPROW_BASE}/sports-ice-hockey-online', 'popular': False},
+    'golf': {'name': 'Golf', 'icon': '⛳', 'url': f'{VIPROW_BASE}/sports-golf-online', 'popular': False},
+    'darts': {'name': 'Darts', 'icon': '🎯', 'url': f'{VIPROW_BASE}/sports-darts-online', 'popular': False},
+    'rugby': {'name': 'Rugby', 'icon': '🏉', 'url': f'{VIPROW_BASE}/sports-rugby-online', 'popular': False},
+    'f1': {'name': 'Formula 1', 'icon': '🏎️', 'url': f'{VIPROW_BASE}/sports-formula-1-online', 'popular': True},
+    'motogp': {'name': 'MotoGP', 'icon': '🏍️', 'url': f'{VIPROW_BASE}/sports-moto-gp-online', 'popular': False},
+    'nascar': {'name': 'NASCAR', 'icon': '🏁', 'url': f'{VIPROW_BASE}/sports-nascar-online', 'popular': False},
+    'volleyball': {'name': 'Volleyball', 'icon': '🏐', 'url': f'{VIPROW_BASE}/sports-volleyball-online', 'popular': False},
+    'other': {'name': 'Other Sports', 'icon': '🎯', 'url': f'{VIPROW_BASE}/sports-others-online', 'popular': False}
 }
 
 # Fichiers de données
@@ -98,13 +123,13 @@ TIMEOUT = 25
 REQUEST_DELAY = 0.5
 AUTO_UPDATE_INTERVAL = 600  # 10 minutes
 
-# Variables globales pour les tâches de fond
+# Variables globales
 background_tasks: set = set()
 shutdown_event: Optional[asyncio.Event] = None
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # 📦 GESTIONNAIRE DE DONNÉES
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 class DataManager:
     """Gestionnaire de données centralisé avec cache"""
@@ -142,20 +167,20 @@ class DataManager:
             "last_update": None,
             "last_reset": datetime.now().date().isoformat(),
             "total_scraped": 0,
-            "sports_count": {}
+            "sports_count": {},
+            "version": "2.0"
         }
         cls.save_data(data)
         return data
     
     @classmethod
     def save_data(cls, data: Dict, trigger_backup: bool = False):
-        """Sauvegarde les données (backup uniquement pour modifications importantes)"""
+        """Sauvegarde les données"""
         try:
             with open(DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             cls._data_cache = data
             
-            # Backup uniquement si demandé (pas pour chaque MAJ auto)
             if trigger_backup:
                 cls._trigger_backup()
                 
@@ -187,12 +212,11 @@ class DataManager:
     
     @classmethod
     def save_favorites(cls, favorites: Dict, trigger_backup: bool = True):
-        """Sauvegarde les favoris et déclenche un backup"""
+        """Sauvegarde les favoris"""
         try:
             with open(FAVORITES_FILE, 'w', encoding='utf-8') as f:
                 json.dump(favorites, f, indent=2)
             
-            # Backup après modification des favoris
             if trigger_backup:
                 cls._trigger_backup()
                 
@@ -232,7 +256,8 @@ class DataManager:
                 'first_name': first_name,
                 'first_seen': datetime.now().isoformat(),
                 'last_seen': datetime.now().isoformat(),
-                'total_visits': 1
+                'total_visits': 1,
+                'tier': 'free'
             }
             logger.info(f"👤 Nouvel utilisateur: {user_id} ({username or first_name})")
         else:
@@ -254,7 +279,6 @@ class DataManager:
                 with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                     cache = json.load(f)
                 
-                # Nettoyer les entrées expirées
                 now = time.time()
                 return {
                     k: v for k, v in cache.items()
@@ -273,12 +297,12 @@ class DataManager:
         except IOError as e:
             logger.error(f"Erreur sauvegarde cache: {e}")
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # 🕷️ SCRAPER VIPROW
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 class VIPRowScraper:
-    """Scraper professionnel pour VIPRow avec gestion async"""
+    """Scraper professionnel pour VIPRow"""
     
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
@@ -306,7 +330,6 @@ class VIPRowScraper:
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
         }
         
         self.session = aiohttp.ClientSession(
@@ -334,7 +357,6 @@ class VIPRowScraper:
                     if response.status == 200:
                         return await response.text()
                     elif response.status == 404:
-                        logger.debug(f"404: {url}")
                         return None
                     else:
                         logger.warning(f"HTTP {response.status}: {url}")
@@ -362,14 +384,11 @@ class VIPRowScraper:
         """Extrait les informations du match depuis le titre"""
         title = VIPRowScraper.clean_text(title)
         
-        # Extraire l'heure
         time_match = re.search(r'(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?)', title)
         match_time = time_match.group(1) if time_match else 'Live'
         
-        # Nettoyer le titre
         title_clean = re.sub(r'\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?', '', title).strip()
         
-        # Patterns pour équipes
         team_patterns = [
             r'(.+?)\s+vs\.?\s+(.+)',
             r'(.+?)\s+-\s+(.+)',
@@ -411,7 +430,6 @@ class VIPRowScraper:
                 
                 match_url = href if href.startswith('http') else urljoin(sport_url, href)
                 
-                # Filtrer les URLs non pertinentes
                 if not any(x in match_url.lower() for x in ['viprow.nu', 'stream', 'watch', 'live']):
                     continue
                 
@@ -423,7 +441,6 @@ class VIPRowScraper:
                 
                 seen.add(match_url)
                 
-                # Extraire le texte du lien
                 link_text = link.get_text(strip=True)
                 if not link_text or len(link_text) < 5:
                     parent = link.find_parent(['div', 'td', 'li', 'tr', 'span'])
@@ -438,7 +455,6 @@ class VIPRowScraper:
                 
                 match_info = self.extract_match_info(link_text)
                 
-                # Générer un ID unique
                 match_id = hashlib.md5(
                     f"{sport_key}_{match_info['title']}_{datetime.now().date()}".encode()
                 ).hexdigest()[:12]
@@ -470,10 +486,9 @@ class VIPRowScraper:
         return matches
     
     async def extract_stream_urls(self, match_url: str, match_id: str) -> Tuple[Optional[str], List[str]]:
-        """Extrait les URLs de stream depuis une page de match"""
+        """Extrait les URLs de stream"""
         cache_key = f"stream_{match_id}"
         
-        # Vérifier le cache
         if cache_key in self.cache:
             cached = self.cache[cache_key]
             if time.time() - cached.get('timestamp', 0) < CACHE_DURATION:
@@ -489,7 +504,6 @@ class VIPRowScraper:
             iframe_url = None
             stream_urls = []
             
-            # Chercher les iframes
             iframes = soup.find_all('iframe', src=True)
             for iframe in iframes:
                 src = iframe.get('src', '').strip()
@@ -501,7 +515,6 @@ class VIPRowScraper:
                         iframe_url = src
                     stream_urls.append(src)
             
-            # Mettre en cache
             self.cache[cache_key] = {
                 'iframe': iframe_url,
                 'streams': stream_urls,
@@ -531,9 +544,6 @@ class VIPRowScraper:
     
     async def scrape_sport(self, sport_key: str, url: str) -> List[Dict]:
         """Scrape un sport spécifique"""
-        config = SPORTS_CONFIGURATION[sport_key]
-        logger.debug(f"📡 Scraping {config['name']}...")
-        
         html = await self.fetch_page(url)
         if html:
             return await self.parse_sport_page(html, sport_key, url)
@@ -544,7 +554,6 @@ class VIPRowScraper:
         logger.info("🚀 Démarrage scraping multi-sports VIPRow...")
         start = time.time()
         
-        # Créer les tâches pour tous les sports
         tasks = [
             self.scrape_sport(key, config['url'])
             for key, config in SPORTS_CONFIGURATION.items()
@@ -564,10 +573,8 @@ class VIPRowScraper:
             elif isinstance(result, Exception):
                 logger.error(f"Erreur scraping: {result}")
         
-        # Dédupliquer par ID
         final_matches = list({m['id']: m for m in all_matches}.values())
         
-        # Sauvegarder
         data = DataManager.load_data()
         data['matches'] = final_matches
         data['last_update'] = datetime.now().isoformat()
@@ -580,9 +587,9 @@ class VIPRowScraper:
         
         return len(final_matches)
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # 🔐 VÉRIFICATION ABONNEMENT
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Vérifie si l'utilisateur est abonné au canal"""
@@ -597,9 +604,9 @@ async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
         logger.debug(f"Erreur vérification abonnement: {e}")
         return False
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # 🎨 GÉNÉRATEURS D'INTERFACE
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 def create_subscription_keyboard() -> InlineKeyboardMarkup:
     """Crée le clavier pour l'abonnement"""
@@ -610,16 +617,26 @@ def create_subscription_keyboard() -> InlineKeyboardMarkup:
 
 
 def create_main_menu_keyboard(sports_count: Dict, user_id: int) -> InlineKeyboardMarkup:
-    """Crée le clavier du menu principal"""
+    """Crée le clavier du menu principal avec prédictions IA"""
     keyboard = []
-    sports_items = list(SPORTS_CONFIGURATION.items())
     
-    # Sports en grille 2x2
-    for i in range(0, len(sports_items), 2):
+    # Section prédictions IA (si disponible)
+    if PREDICTIONS_ENABLED:
+        keyboard.append([
+            InlineKeyboardButton("🔮 Prédictions IA", callback_data="predictions_menu"),
+            InlineKeyboardButton("🏆 Classement", callback_data="leaderboard")
+        ])
+    
+    # Sports populaires en premier (2 par ligne)
+    popular_sports = [(k, v) for k, v in SPORTS_CONFIGURATION.items() if v.get('popular', False)]
+    other_sports = [(k, v) for k, v in SPORTS_CONFIGURATION.items() if not v.get('popular', False)]
+    
+    # Sports populaires
+    for i in range(0, len(popular_sports), 2):
         row = []
         for j in range(2):
-            if i + j < len(sports_items):
-                key, config = sports_items[i + j]
+            if i + j < len(popular_sports):
+                key, config = popular_sports[i + j]
                 count = sports_count.get(key.upper(), 0)
                 row.append(InlineKeyboardButton(
                     f"{config['icon']} {config['name']} ({count})",
@@ -627,19 +644,46 @@ def create_main_menu_keyboard(sports_count: Dict, user_id: int) -> InlineKeyboar
                 ))
         keyboard.append(row)
     
-    keyboard.extend([
-        [InlineKeyboardButton("⭐ Mes Favoris", callback_data="favorites")],
-        [InlineKeyboardButton("🔄 Actualiser Tout", callback_data="refresh_all")]
+    # Bouton pour plus de sports
+    if other_sports:
+        keyboard.append([
+            InlineKeyboardButton("📋 Plus de sports...", callback_data="more_sports")
+        ])
+    
+    # Actions utilisateur
+    keyboard.append([
+        InlineKeyboardButton("⭐ Favoris", callback_data="favorites"),
+        InlineKeyboardButton("📊 Stats", callback_data="my_stats")
     ])
     
+    keyboard.append([
+        InlineKeyboardButton("🔄 Actualiser", callback_data="refresh_all")
+    ])
+    
+    # Admin
     if user_id in ADMIN_IDS:
         keyboard.append([InlineKeyboardButton("⚙️ Admin Panel", callback_data="admin")])
     
     return InlineKeyboardMarkup(keyboard)
 
-# ============================================================================
+
+def create_predictions_menu_keyboard() -> InlineKeyboardMarkup:
+    """Crée le menu des prédictions"""
+    keyboard = [
+        [InlineKeyboardButton("🔮 Analyser un Match", callback_data="select_sport_predict")],
+        [InlineKeyboardButton("👥 Votes Communauté", callback_data="community_hub")],
+        [
+            InlineKeyboardButton("📊 Mes Stats", callback_data="my_stats"),
+            InlineKeyboardButton("🏆 Classement", callback_data="leaderboard")
+        ],
+        [InlineKeyboardButton("📜 Historique", callback_data="my_history")],
+        [InlineKeyboardButton("🔙 Menu Principal", callback_data="main_menu")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# ════════════════════════════════════════════════════════════════════════════
 # 🤖 COMMANDES UTILISATEUR
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /start"""
@@ -649,18 +693,26 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     DataManager.register_user(user_id, user.username, user.first_name)
     logger.info(f"👤 {user_id} ({user.username or user.first_name}) => /start")
     
-    # Vérification abonnement
     is_sub = await check_subscription(user_id, context)
     
     if not is_sub:
+        predictions_text = ""
+        if PREDICTIONS_ENABLED:
+            predictions_text = """
+🔮 <b>PRÉDICTIONS IA (NOUVEAU!)</b>
+  • Résultat du match
+  • Score exact
+  • Corners, Cartons
+  • Paris combinés
+  • Votes communautaires
+  • Classements & Points
+"""
+        
         msg = (
-            "🏆 <b>VIPROW ULTIMATE PRO</b> 🏆\n\n"
+            "🏆 <b>VIPROW ULTIMATE PRO V2</b> 🏆\n\n"
             f"👋 Bienvenue <b>{user.first_name}</b> !\n\n"
             "🎯 <b>ACCÈS ILLIMITÉ À TOUS LES SPORTS HD</b>\n\n"
-            "🔮 <b>Prédictions IA (NOUVEAU!)</b>\n"  
-            "  • Résultat du match\n"                  
-            "  • Corners, Cartons\n"                   
-            "  • Score exact\n"                        
+            f"{predictions_text}"
             "⚽ Football • 🥊 UFC/Boxing • 🤼 WWE\n"
             "🏈 NFL • 🏀 NBA • 🏒 NHL • 🎾 Tennis\n"
             "⛳ Golf • 🎯 Darts • 🏉 Rugby\n"
@@ -683,6 +735,58 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_menu(update, context)
 
 
+async def cmd_predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande /predict - Accès direct aux prédictions"""
+    if not PREDICTIONS_ENABLED:
+        await update.message.reply_text(
+            "❌ Les prédictions IA ne sont pas disponibles pour le moment.",
+            parse_mode='HTML'
+        )
+        return
+    
+    await update.message.reply_text(
+        "🔮 <b>PRÉDICTIONS IA</b>\n\n"
+        "Choisissez une option:",
+        parse_mode='HTML',
+        reply_markup=create_predictions_menu_keyboard()
+    )
+
+
+async def cmd_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande /leaderboard - Classement"""
+    if PREDICTIONS_ENABLED:
+        # Créer un faux query pour réutiliser la fonction
+        class FakeQuery:
+            def __init__(self, message, user):
+                self.message = message
+                self.from_user = user
+            async def answer(self): pass
+            async def edit_message_text(self, *args, **kwargs):
+                await self.message.reply_text(*args, **kwargs)
+        
+        fake_query = FakeQuery(update.message, update.effective_user)
+        await show_leaderboard(fake_query)
+    else:
+        await update.message.reply_text("❌ Fonctionnalité non disponible")
+
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande /stats - Statistiques utilisateur"""
+    if PREDICTIONS_ENABLED:
+        class FakeQuery:
+            def __init__(self, message, user):
+                self.message = message
+                self.from_user = user
+            async def answer(self): pass
+            async def edit_message_text(self, *args, **kwargs):
+                await self.message.reply_text(*args, **kwargs)
+        
+        fake_query = FakeQuery(update.message, update.effective_user)
+        await show_user_prediction_stats(fake_query)
+    else:
+        await update.message.reply_text("❌ Fonctionnalité non disponible")
+
+
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Affiche le menu principal"""
     user_id = update.effective_user.id
@@ -693,15 +797,16 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     last_update = data.get('last_update')
     update_time = datetime.fromisoformat(last_update).strftime("%H:%M:%S") if last_update else "Jamais"
     
+    predictions_status = "🟢 Actif" if PREDICTIONS_ENABLED else "🔴 Indisponible"
+    
     msg = (
-        "🏆 <b>VIPROW ULTIMATE PRO</b> 🏆\n\n"
+        "🏆 <b>VIPROW ULTIMATE PRO V2</b> 🏆\n\n"
         f"📊 <b>{total} événements en direct</b>\n"
         f"🔄 MAJ: <code>{update_time}</code>\n"
-        f"📅 Reset: <b>Quotidien à minuit</b>\n\n"
-        "🎯 <b>Sélectionnez votre sport:</b>"
+        f"🔮 Prédictions IA: {predictions_status}\n\n"
+        "🎯 <b>Choisissez une option:</b>"
     )
     
-    # ✅ UTILISER LA FONCTION create_main_menu_keyboard QUI RETOURNE DÉJÀ UN InlineKeyboardMarkup
     keyboard_markup = create_main_menu_keyboard(sports_count, user_id)
     
     if hasattr(update, 'callback_query') and update.callback_query:
@@ -718,9 +823,162 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg, parse_mode='HTML', reply_markup=keyboard_markup
         )
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # 📺 AFFICHAGE MATCHS ET STREAMS
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
+
+async def show_predictions_menu(query):
+    """Affiche le menu des prédictions"""
+    await query.answer()
+    
+    msg = """╔═══════════════════════════════════════╗
+   🔮 <b>PRÉDICTIONS IA</b>
+╚═══════════════════════════════════════╝
+
+Bienvenue dans le hub des prédictions !
+
+🤖 <b>Analyse IA Ultra-Avancée</b>
+  • Résultat du match (1/X/2)
+  • Score exact
+  • Total de buts
+  • Corners & Cartons
+  • Paris combinés
+
+👥 <b>Communauté</b>
+  • Votez sur les matchs
+  • Comparez avec l'IA
+  • Gagnez des points
+
+🏆 <b>Gamification</b>
+  • Classement global
+  • Achievements à débloquer
+  • Séries de victoires
+
+Choisissez une option:"""
+    
+    await query.edit_message_text(
+        msg,
+        parse_mode='HTML',
+        reply_markup=create_predictions_menu_keyboard()
+    )
+
+
+async def show_sport_for_prediction(query):
+    """Affiche les sports pour sélectionner un match à analyser"""
+    await query.answer()
+    
+    data = DataManager.load_data()
+    sports_count = data.get('sports_count', {})
+    
+    keyboard = []
+    
+    # Sports avec des matchs disponibles
+    for key, config in SPORTS_CONFIGURATION.items():
+        count = sports_count.get(key.upper(), 0)
+        if count > 0:
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"{config['icon']} {config['name']} ({count})",
+                    callback_data=f"predict_sport_{key}"
+                )
+            ])
+    
+    if not keyboard:
+        keyboard.append([
+            InlineKeyboardButton("🔄 Actualiser les matchs", callback_data="refresh_all")
+        ])
+    
+    keyboard.append([InlineKeyboardButton("🔙 Retour", callback_data="predictions_menu")])
+    
+    msg = """🔮 <b>SÉLECTION DU SPORT</b>
+
+Choisissez un sport pour voir les matchs disponibles:"""
+    
+    await query.edit_message_text(
+        msg,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def show_matches_for_prediction(query, sport_key: str):
+    """Affiche les matchs d'un sport pour prédiction"""
+    await query.answer()
+    
+    data = DataManager.load_data()
+    matches = [m for m in data.get('matches', []) if m['sport'].lower() == sport_key.lower()]
+    
+    config = SPORTS_CONFIGURATION.get(sport_key, {'icon': '🎯', 'name': sport_key.upper()})
+    
+    if not matches:
+        keyboard = [
+            [InlineKeyboardButton("🔄 Rafraîchir", callback_data=f"predict_sport_{sport_key}")],
+            [InlineKeyboardButton("🔙 Retour", callback_data="select_sport_predict")]
+        ]
+        
+        await query.edit_message_text(
+            f"{config['icon']} <b>{config['name'].upper()}</b>\n\n"
+            "❌ Aucun match disponible pour analyse\n\n"
+            "💡 Revenez dans quelques minutes !",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+    
+    keyboard = []
+    for match in matches[:15]:  # Limite à 15 matchs
+        if match['team2']:
+            text = f"🔮 {match['team1']} vs {match['team2']}"
+        else:
+            text = f"🔮 {match['title'][:40]}"
+        
+        keyboard.append([InlineKeyboardButton(text, callback_data=f"predict_{match['id']}")])
+    
+    keyboard.append([InlineKeyboardButton("🔙 Retour", callback_data="select_sport_predict")])
+    
+    msg = (
+        f"{config['icon']} <b>{config['name'].upper()} - PRÉDICTIONS</b>\n\n"
+        f"📊 {len(matches)} match(s) disponible(s)\n\n"
+        "👇 Sélectionnez un match pour l'analyse IA:"
+    )
+    
+    await query.edit_message_text(
+        msg, parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def show_more_sports(query):
+    """Affiche les sports supplémentaires"""
+    await query.answer()
+    
+    data = DataManager.load_data()
+    sports_count = data.get('sports_count', {})
+    
+    other_sports = [(k, v) for k, v in SPORTS_CONFIGURATION.items() if not v.get('popular', False)]
+    
+    keyboard = []
+    for i in range(0, len(other_sports), 2):
+        row = []
+        for j in range(2):
+            if i + j < len(other_sports):
+                key, config = other_sports[i + j]
+                count = sports_count.get(key.upper(), 0)
+                row.append(InlineKeyboardButton(
+                    f"{config['icon']} {config['name']} ({count})",
+                    callback_data=f"sport_{key}"
+                ))
+        keyboard.append(row)
+    
+    keyboard.append([InlineKeyboardButton("🔙 Menu Principal", callback_data="main_menu")])
+    
+    await query.edit_message_text(
+        "📋 <b>AUTRES SPORTS</b>\n\n"
+        "Sélectionnez un sport:",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 
 async def show_sport_matches(query, sport_key: str):
     """Affiche les matchs d'un sport"""
@@ -780,7 +1038,7 @@ async def show_sport_matches(query, sport_key: str):
 
 
 async def watch_match(query, match_id: str):
-    """Affiche les détails d'un match"""
+    """Affiche les détails d'un match avec option prédiction"""
     await query.answer("⏳ Chargement...")
     
     data = DataManager.load_data()
@@ -805,8 +1063,7 @@ async def watch_match(query, match_id: str):
     if not match.get('stream_urls') and not match.get('iframe_url'):
         await query.edit_message_text(
             "🔍 <b>EXTRACTION DES STREAMS...</b>\n\n"
-            "⏳ Analyse en cours...\n"
-            "📡 Détection des lecteurs...",
+            "⏳ Analyse en cours...",
             parse_mode='HTML'
         )
         
@@ -815,7 +1072,6 @@ async def watch_match(query, match_id: str):
             match['iframe_url'] = iframe
             match['stream_urls'] = streams
             
-            # Mettre à jour dans les données
             for i, m in enumerate(data['matches']):
                 if m['id'] == match_id:
                     data['matches'][i] = match
@@ -825,15 +1081,21 @@ async def watch_match(query, match_id: str):
     iframe = match.get('iframe_url')
     streams = match.get('stream_urls', [])
     
-    # ✅ CONSTRUIRE LE CLAVIER UNE SEULE FOIS
+    # Construire le clavier
     keyboard = []
     
-    # Bouton prédiction IA en premier
+    # Bouton prédiction IA en premier (si disponible)
     if PREDICTIONS_ENABLED:
         keyboard.append([
             InlineKeyboardButton(
-                "🔮 Analyse IA Complète (Corners, Cartons, Buts...)", 
+                "🔮 Analyse IA Complète", 
                 callback_data=f"predict_{match_id}"
+            )
+        ])
+        keyboard.append([
+            InlineKeyboardButton(
+                "👥 Votes Communauté", 
+                callback_data=f"votes_{match_id}"
             )
         ])
     
@@ -856,12 +1118,12 @@ async def watch_match(query, match_id: str):
             InlineKeyboardButton("🌐 Page du Match", url=match['page_url'])
         ])
     
-    # Boutons favoris et retour
+    # Favoris et retour
     fav_text = "💔 Retirer des favoris" if is_fav else "⭐ Ajouter aux favoris"
     keyboard.append([InlineKeyboardButton(fav_text, callback_data=f"fav_{match_id}")])
     keyboard.append([InlineKeyboardButton("🔙 Retour", callback_data=f"sport_{match['sport'].lower()}")])
     
-    # Construire le message
+    # Message
     msg = (
         f"{match['sport_icon']} <b>{match['title']}</b>\n\n"
         f"🏆 {match['sport_name']}\n"
@@ -869,11 +1131,13 @@ async def watch_match(query, match_id: str):
         f"🔴 <b>EN DIRECT</b>\n\n"
     )
     
+    if PREDICTIONS_ENABLED:
+        msg += "🔮 <b>NOUVEAU:</b> Obtenez l'analyse IA complète !\n\n"
+    
     if iframe:
         msg += (
-            "✅ <b>LECTEUR DISPONIBLE</b>\n\n"
-            "📺 Regarder directement dans Telegram\n"
-            "🚫 Sans pub ni redirections\n\n"
+            "✅ <b>LECTEUR DISPONIBLE</b>\n"
+            "📺 Regarder directement dans Telegram\n\n"
         )
     elif streams:
         msg += f"✅ {len(streams)} stream(s) disponible(s)\n\n"
@@ -926,10 +1190,9 @@ async def embed_stream(query, match_id: str):
         f"🎯 <b>{match['title']}</b>\n"
         f"{match['sport_icon']} {match['sport_name']} • {match['start_time']}\n\n"
         f"<a href='{player_url}'>▶️ CLIQUER POUR REGARDER</a>\n\n"
-        "💡 <b>CONSEILS:</b>\n\n"
-        "📱 <b>Mobile:</b> Mode plein écran recommandé\n"
-        "💻 <b>PC:</b> F11 pour plein écran\n\n"
-        "⚡ <b>Problème?</b> Rafraîchissez ou essayez une alternative\n\n"
+        "💡 <b>CONSEILS:</b>\n"
+        "📱 Mobile: Mode plein écran\n"
+        "💻 PC: F11 pour plein écran\n\n"
         "🚫 <b>SANS PUB • SANS REDIRECT</b>"
     )
     
@@ -993,9 +1256,9 @@ async def show_stream_options(query, match_id: str):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # ⭐ FAVORIS
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 async def toggle_favorite(query, match_id: str):
     """Toggle un match dans les favoris"""
@@ -1068,9 +1331,9 @@ async def show_favorites(query):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # 🔄 ACTUALISATION
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 async def refresh_all(query):
     """Actualise tous les matchs"""
@@ -1108,9 +1371,9 @@ async def refresh_all(query):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # ⚙️ PANEL ADMIN
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 async def admin_panel(query):
     """Panel administrateur"""
@@ -1133,6 +1396,7 @@ async def admin_panel(query):
     ]
     
     total_favs = sum(len(v) for v in favorites.values())
+    predictions_status = "✅ Actif" if PREDICTIONS_ENABLED else "❌ Inactif"
     
     msg = (
         "⚙️ <b>PANEL ADMINISTRATEUR</b>\n\n"
@@ -1141,6 +1405,7 @@ async def admin_panel(query):
         f"• Sports actifs: <code>{len(sports_count)}</code>\n"
         f"• Utilisateurs: <code>{len(users)}</code>\n"
         f"• Favoris totaux: <code>{total_favs}</code>\n"
+        f"• Prédictions IA: {predictions_status}\n"
         f"• Dernière MAJ: <code>{data.get('last_update', 'N/A')[:19]}</code>\n"
         f"• Dernier reset: <code>{data.get('last_reset', 'N/A')}</code>"
     )
@@ -1220,9 +1485,9 @@ async def admin_reset(query):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # 🎯 CALLBACK HANDLER PRINCIPAL
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gestionnaire principal des callbacks"""
@@ -1237,7 +1502,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("⚠️ Rejoignez le canal d'abord !", show_alert=True)
             return
     
-    # Router les callbacks
+    # ═══════════════════════════════════════════════════════════════════════
+    # NAVIGATION PRINCIPALE
+    # ═══════════════════════════════════════════════════════════════════════
+    
     if data == "check_sub":
         is_sub = await check_subscription(user_id, context)
         if is_sub:
@@ -1249,23 +1517,59 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "main_menu":
         await show_main_menu(update, context)
     
+    elif data == "more_sports":
+        await show_more_sports(query)
+    
     elif data == "favorites":
         await show_favorites(query)
     
     elif data == "refresh_all":
         await refresh_all(query)
     
-    elif data == "admin":
-        await admin_panel(query)
+    # ═══════════════════════════════════════════════════════════════════════
+    # PRÉDICTIONS IA (si disponible)
+    # ═══════════════════════════════════════════════════════════════════════
     
-    elif data == "admin_update":
-        await refresh_all(query)
+    elif data == "predictions_menu" and PREDICTIONS_ENABLED:
+        await show_predictions_menu(query)
     
-    elif data == "admin_stats":
-        await admin_stats(query)
+    elif data == "select_sport_predict" and PREDICTIONS_ENABLED:
+        await show_sport_for_prediction(query)
     
-    elif data == "admin_reset":
-        await admin_reset(query)
+    elif data.startswith("predict_sport_") and PREDICTIONS_ENABLED:
+        sport = data.split("_", 2)[2]
+        await show_matches_for_prediction(query, sport)
+    
+    elif data.startswith("predict_") and PREDICTIONS_ENABLED:
+        match_id = data.split("_", 1)[1]
+        await handle_prediction_request(query, match_id, DataManager)
+    
+    elif data.startswith("vote_") and PREDICTIONS_ENABLED:
+        parts = data.split("_")
+        if len(parts) == 3:
+            match_id = parts[1]
+            vote = parts[2]
+            await handle_vote(query, match_id, vote, DataManager)
+    
+    elif data.startswith("votes_") and PREDICTIONS_ENABLED:
+        match_id = data.split("_", 1)[1]
+        await show_community_votes(query, match_id, DataManager)
+    
+    elif data == "my_stats" and PREDICTIONS_ENABLED:
+        await show_user_prediction_stats(query)
+    
+    elif data == "leaderboard" and PREDICTIONS_ENABLED:
+        await show_leaderboard(query)
+    
+    elif data == "my_history" and PREDICTIONS_ENABLED:
+        await show_prediction_history(query)
+    
+    elif data == "community_hub" and PREDICTIONS_ENABLED:
+        await show_sport_for_prediction(query)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # SPORTS & MATCHS
+    # ═══════════════════════════════════════════════════════════════════════
     
     elif data.startswith("sport_"):
         sport = data.split("_", 1)[1]
@@ -1286,37 +1590,45 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("fav_"):
         match_id = data.split("_", 1)[1]
         await toggle_favorite(query, match_id)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # ADMIN
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    elif data == "admin":
+        await admin_panel(query)
+    
+    elif data == "admin_update":
+        await refresh_all(query)
+    
+    elif data == "admin_stats":
+        await admin_stats(query)
+    
+    elif data == "admin_reset":
+        await admin_reset(query)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # FALLBACK
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    else:
+        await query.answer("❓ Action non reconnue")
 
-    if PREDICTIONS_ENABLED:
-        # Demande de prédiction
-        if data.startswith("predict_"):
-            match_id = data.split("_", 1)[1]
-            await handle_prediction_request(query, match_id, DataManager)
-            return
-        
-        # Statistiques de prédictions
-        elif data == "prediction_stats":
-            await show_user_prediction_stats(query)
-            return
-
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # 🔄 TÂCHES DE FOND
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 async def auto_update_task():
     """Tâche de mise à jour automatique"""
     global shutdown_event
     
-    # Attendre que le bot soit prêt
     await asyncio.sleep(60)
     
     logger.info("🔄 Tâche auto-update démarrée")
     
     while True:
         try:
-            # Vérifier si arrêt demandé
             if shutdown_event and shutdown_event.is_set():
-                logger.info("⏹️ Auto-update: arrêt demandé")
                 break
             
             logger.info("🔄 Exécution MAJ automatique...")
@@ -1325,12 +1637,10 @@ async def auto_update_task():
             logger.info(f"✅ MAJ auto terminée: {count} événements")
             
         except asyncio.CancelledError:
-            logger.info("⏹️ Auto-update annulé")
             break
         except Exception as e:
             logger.error(f"Erreur auto-update: {e}")
         
-        # Attendre avant la prochaine MAJ
         try:
             if shutdown_event:
                 await asyncio.wait_for(shutdown_event.wait(), timeout=AUTO_UPDATE_INTERVAL)
@@ -1349,14 +1659,12 @@ async def daily_reset_task():
     
     while True:
         try:
-            # Calculer le temps jusqu'à minuit
             now = datetime.now()
             tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
             seconds_until_midnight = (tomorrow - now).total_seconds()
             
             logger.info(f"⏰ Prochain reset dans {seconds_until_midnight/3600:.1f}h")
             
-            # Attendre jusqu'à minuit ou arrêt
             if shutdown_event:
                 try:
                     await asyncio.wait_for(shutdown_event.wait(), timeout=seconds_until_midnight)
@@ -1366,7 +1674,6 @@ async def daily_reset_task():
             else:
                 await asyncio.sleep(seconds_until_midnight)
             
-            # Vérifier si arrêt demandé
             if shutdown_event and shutdown_event.is_set():
                 break
             
@@ -1375,23 +1682,19 @@ async def daily_reset_task():
             logger.info("✅ Reset quotidien terminé")
             
         except asyncio.CancelledError:
-            logger.info("⏹️ Daily-reset annulé")
             break
         except Exception as e:
             logger.error(f"Erreur daily-reset: {e}")
             await asyncio.sleep(3600)
 
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 # 🚀 POINTS D'ENTRÉE
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════════════
 
 def main():
-    """
-    Point d'entrée principal - compatible avec le launcher multi-bot.
-    Cette fonction est appelée dans un thread avec sa propre boucle asyncio.
-    """
+    """Point d'entrée principal"""
     logger.info("=" * 70)
-    logger.info("⚽ FOOTBOT VIPROW - DÉMARRAGE")
+    logger.info("⚽ FOOTBOT VIPROW ULTIMATE PRO V2 - DÉMARRAGE")
     logger.info("=" * 70)
     
     if not BOT_TOKEN or len(BOT_TOKEN) < 20:
@@ -1400,20 +1703,26 @@ def main():
     
     logger.info(f"👮 Admins: {ADMIN_IDS}")
     logger.info(f"📢 Canal requis: {REQUIRED_CHANNEL}")
-    logger.info("")
+    logger.info(f"🔮 Prédictions IA: {'✅ Activé' if PREDICTIONS_ENABLED else '❌ Désactivé'}")
     
     # Créer l'application
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Handlers
+    # Handlers de commandes
     application.add_handler(CommandHandler("start", cmd_start))
+    application.add_handler(CommandHandler("predict", cmd_predict))
+    application.add_handler(CommandHandler("leaderboard", cmd_leaderboard))
+    application.add_handler(CommandHandler("stats", cmd_stats))
+    
+    # Handler de callbacks
     application.add_handler(CallbackQueryHandler(callback_handler))
     
     logger.info("✅ Handlers configurés")
     logger.info("")
     logger.info("🌐 SPORTS DISPONIBLES:")
     for key, config in SPORTS_CONFIGURATION.items():
-        logger.info(f"   {config['icon']} {config['name']}")
+        popular = "⭐" if config.get('popular') else ""
+        logger.info(f"   {config['icon']} {config['name']} {popular}")
     logger.info("")
     logger.info("🚀 Démarrage du polling...")
     
@@ -1422,7 +1731,7 @@ def main():
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
             close_loop=False,
-            stop_signals=None  # Désactivé car géré par le launcher
+            stop_signals=None
         )
     except Exception as e:
         logger.error(f"❌ Erreur: {e}")
@@ -1432,14 +1741,11 @@ def main():
 
 
 async def main_async():
-    """
-    Version async du point d'entrée.
-    Utilisée par le launcher pour une meilleure gestion des boucles async.
-    """
+    """Version async du point d'entrée"""
     global shutdown_event, background_tasks
     
     logger.info("=" * 70)
-    logger.info("⚽ FOOTBOT VIPROW - DÉMARRAGE (Async)")
+    logger.info("⚽ FOOTBOT VIPROW ULTIMATE PRO V2 - DÉMARRAGE (Async)")
     logger.info("=" * 70)
     
     if not BOT_TOKEN or len(BOT_TOKEN) < 20:
@@ -1448,25 +1754,21 @@ async def main_async():
     
     logger.info(f"👮 Admins: {ADMIN_IDS}")
     logger.info(f"📢 Canal requis: {REQUIRED_CHANNEL}")
+    logger.info(f"🔮 Prédictions IA: {'✅ Activé' if PREDICTIONS_ENABLED else '❌ Désactivé'}")
     
-    # Initialiser l'event d'arrêt
     shutdown_event = asyncio.Event()
     
-    # Créer l'application
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Handlers
     application.add_handler(CommandHandler("start", cmd_start))
+    application.add_handler(CommandHandler("predict", cmd_predict))
+    application.add_handler(CommandHandler("leaderboard", cmd_leaderboard))
+    application.add_handler(CommandHandler("stats", cmd_stats))
     application.add_handler(CallbackQueryHandler(callback_handler))
     
     logger.info("✅ Handlers configurés")
-    logger.info("")
-    logger.info("🌐 SPORTS DISPONIBLES:")
-    for key, config in SPORTS_CONFIGURATION.items():
-        logger.info(f"   {config['icon']} {config['name']}")
-    logger.info("")
     
-    # Démarrer l'application
     async with application:
         await application.start()
         await application.updater.start_polling(
@@ -1474,9 +1776,9 @@ async def main_async():
             drop_pending_updates=True
         )
         
-        logger.info("✅ FootBot actif et en écoute")
+        logger.info("✅ FootBot V2 actif et en écoute")
         
-        # Démarrer les tâches de fond
+        # Tâches de fond
         task_update = asyncio.create_task(auto_update_task(), name="footbot_auto_update")
         task_reset = asyncio.create_task(daily_reset_task(), name="footbot_daily_reset")
         
@@ -1488,14 +1790,12 @@ async def main_async():
         
         logger.info("🔄 Tâches de fond démarrées")
         
-        # Garder le bot actif
         try:
             while True:
                 await asyncio.sleep(3600)
         except asyncio.CancelledError:
             logger.info("⏹️ Arrêt demandé")
         finally:
-            # Arrêter les tâches de fond
             shutdown_event.set()
             
             for task in background_tasks:
@@ -1505,11 +1805,10 @@ async def main_async():
             if background_tasks:
                 await asyncio.gather(*background_tasks, return_exceptions=True)
             
-            # Arrêter le bot
             await application.updater.stop()
             await application.stop()
             
-            logger.info("👋 FootBot arrêté proprement")
+            logger.info("👋 FootBot V2 arrêté proprement")
 
 
 if __name__ == '__main__':
