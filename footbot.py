@@ -64,7 +64,7 @@ except ImportError as e:
     
     # Fallback sur l'ancien module
     try:
-        from prediction_module import (
+        from prediction_module_v2 import (
             handle_prediction_request,
             show_user_prediction_stats,
             PredictionsManager
