@@ -492,7 +492,24 @@ class AdvancedDataManager:
         user_data = stats.get('users', {}).get(str(user_id))
         
         if user_data:
-            return UserProfile(**user_data)
+            # Filtrer uniquement les champs valides de UserProfile
+            valid_fields = {
+                'user_id', 'username', 'tier', 'total_points', 
+                'predictions_count', 'wins_count', 'current_streak',
+                'best_streak', 'achievements', 'created_at'
+            }
+            filtered_data = {k: v for k, v in user_data.items() if k in valid_fields}
+            
+            # S'assurer que user_id est présent
+            if 'user_id' not in filtered_data:
+                filtered_data['user_id'] = user_id
+            
+            try:
+                return UserProfile(**filtered_data)
+            except Exception as e:
+                logger.error(f"Erreur chargement profil: {e}")
+                # Créer un nouveau profil en cas d'erreur
+                return UserProfile(user_id=user_id, username=username)
         
         profile = UserProfile(user_id=user_id, username=username)
         cls.save_user_profile(profile)
