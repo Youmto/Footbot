@@ -44,9 +44,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("footbot")
 
-# Chargement du module de prédictions
+# Chargement du module de prédictions (V3 > V2 > V1)
 try:
-    from prediction_module_v2 import (
+    from prediction_module import (
         handle_prediction_request,
         handle_vote,
         show_community_votes,
@@ -55,25 +55,35 @@ try:
         show_prediction_history,
         PredictionsManager,
         AdvancedDataManager,
-        PREDICTIONS_ENABLED
+        PREDICTIONS_ENABLED,
+        SPORTS_CONFIG,
+        EventValidator
     )
-    logger.info("✅ Module prédictions V2 chargé avec succès")
+    logger.info("✅ Module prédictions V3 ULTRA chargé avec succès")
 except ImportError as e:
-    PREDICTIONS_ENABLED = False
-    logger.warning(f"⚠️ Module prédictions V2 non disponible: {e}")
+    logger.warning(f"⚠️ Module prédictions V3 non disponible: {e}")
     
-    # Fallback sur l'ancien module
     try:
         from prediction_module_v2 import (
             handle_prediction_request,
+            handle_vote,
+            show_community_votes,
             show_user_prediction_stats,
-            PredictionsManager
+            show_leaderboard,
+            show_prediction_history,
+            PredictionsManager,
+            AdvancedDataManager,
+            PREDICTIONS_ENABLED
         )
-        PREDICTIONS_ENABLED = True
-        logger.info("✅ Module prédictions V1 chargé (fallback)")
-    except ImportError:
+        SPORTS_CONFIG = None
+        EventValidator = None
+        logger.info("✅ Module prédictions V2 chargé (fallback)")
+    except ImportError as e2:
         PREDICTIONS_ENABLED = False
-        logger.warning("⚠️ Aucun module de prédictions disponible")
+        SPORTS_CONFIG = None
+        EventValidator = None
+        logger.warning(f"⚠️ Aucun module de prédictions disponible: {e2}")
+
 
 # Configuration Bot
 BOT_TOKEN = os.environ.get("FOOTBOT_TOKEN", "").strip()
