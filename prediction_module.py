@@ -1693,20 +1693,28 @@ class PredictionsManager:
             return await predictor.analyze_match(match, user_id)
 
 # ════════════════════════════════════════════════════════════════════════════
-# 📲 HANDLERS TELEGRAM
+# 📲 HANDLERS TELEGRAM (Compatible avec footbot.py)
 # ════════════════════════════════════════════════════════════════════════════
 
-async def handle_prediction_request(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    match: Dict
-) -> None:
-    """Handler principal pour les demandes de prédiction"""
-    
-    query = update.callback_query
+async def handle_prediction_request(query, match_id: str, data_manager) -> None:
+    """
+    Handler principal pour les demandes de prédiction
+    Args:
+        query: CallbackQuery de Telegram
+        match_id: ID du match
+        data_manager: Classe DataManager de footbot
+    """
     user = query.from_user
     user_id = user.id
     username = user.username or user.first_name or "User"
+    
+    # Récupérer le match depuis DataManager
+    all_matches = data_manager.load_data().get('matches', [])
+    match = next((m for m in all_matches if m.get('id') == match_id), None)
+    
+    if not match:
+        await query.answer("❌ Match non trouvé", show_alert=True)
+        return
     
     # Vérifier le profil et les limites
     profile = AdvancedDataManager.get_user_profile(user_id, username)
@@ -1720,12 +1728,14 @@ async def handle_prediction_request(
         )
         return
     
-    # Message de chargement
+    # Récupérer la configuration du sport
     sport = match.get('sport', 'FOOTBALL').lower()
     sport_config = SPORTS_CONFIG.get(sport, SPORTS_CONFIG['other'])
     
-    loading_msg = await query.edit_message_text(
-        f"""🔮 <b>Analyse en cours...</b>
+    # Message de chargement
+    try:
+        loading_msg = await query.edit_message_text(
+            f"""🔮 <b>Analyse en cours...</b>
 
 {sport_config['icon']} <b>{match.get('title', 'Match')[:50]}</b>
 
@@ -1734,8 +1744,10 @@ async def handle_prediction_request(
 🎯 Génération des prédictions...
 
 <i>Veuillez patienter quelques secondes...</i>""",
-        parse_mode='HTML'
-    )
+            parse_mode='HTML'
+        )
+    except Exception:
+        loading_msg = query.message
     
     try:
         # Générer la prédiction
@@ -1778,6 +1790,9 @@ async def handle_prediction_request(
         
     except Exception as e:
         logger.error(f"❌ Erreur prédiction: {e}")
+        import traceback
+        traceback.print_exc()
+        
         await loading_msg.edit_text(
             f"""❌ <b>Erreur lors de l'analyse</b>
 
@@ -1791,17 +1806,20 @@ Une erreur est survenue. Veuillez réessayer.
             ]])
         )
 
-async def handle_vote(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    match_id: str,
-    vote: str,
-    match: Dict = None
-) -> None:
-    """Handler pour les votes communautaires"""
-    
-    query = update.callback_query
+async def handle_vote(query, match_id: str, vote: str, data_manager) -> None:
+    """
+    Handler pour les votes communautaires
+    Args:
+        query: CallbackQuery de Telegram
+        match_id: ID du match
+        vote: Le vote (1, X, 2, etc.)
+        data_manager: Classe DataManager de footbot
+    """
     user = query.from_user
+    
+    # Récupérer le match
+    all_matches = data_manager.load_data().get('matches', [])
+    match = next((m for m in all_matches if m.get('id') == match_id), None)
     
     sport = match.get('sport', 'football').lower() if match else 'football'
     
@@ -1816,24 +1834,27 @@ async def handle_vote(
     await query.answer(f"✅ Vote enregistré: {vote} (+1 point)")
     
     # Afficher les votes mis à jour
-    await show_community_votes(update, context, match_id, match)
+    await show_community_votes(query, match_id, data_manager)
 
-async def show_community_votes(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    match_id: str,
-    match: Dict = None
-) -> None:
-    """Affiche les votes communautaires"""
-    
-    query = update.callback_query
+async def show_community_votes(query, match_id: str, data_manager) -> None:
+    """
+    Affiche les votes communautaires
+    Args:
+        query: CallbackQuery de Telegram
+        match_id: ID du match
+        data_manager: Classe DataManager de footbot
+    """
     user = query.from_user
+    
+    # Récupérer le match
+    all_matches = data_manager.load_data().get('matches', [])
+    match = next((m for m in all_matches if m.get('id') == match_id), None)
+    
+    if not match:
+        match = {'id': match_id, 'title': 'Match', 'sport': 'football'}
     
     vote_stats = AdvancedDataManager.get_vote_stats(match_id)
     user_vote = AdvancedDataManager.get_user_vote(match_id, user.id)
-    
-    if not match:
-        match = {'id': match_id, 'title': 'Match', 'sport': vote_stats.get('sport', 'football')}
     
     formatted = TelegramFormatter.format_community_votes(match, vote_stats, user_vote)
     
@@ -1866,13 +1887,12 @@ async def show_community_votes(
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
-async def show_user_prediction_stats(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Affiche les statistiques de l'utilisateur"""
-    
-    query = update.callback_query
+async def show_user_prediction_stats(query) -> None:
+    """
+    Affiche les statistiques de l'utilisateur
+    Args:
+        query: CallbackQuery de Telegram
+    """
     user = query.from_user
     
     profile = AdvancedDataManager.get_user_profile(user.id, user.username or user.first_name)
@@ -1892,14 +1912,12 @@ async def show_user_prediction_stats(
         reply_markup=keyboard
     )
 
-async def show_leaderboard(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Affiche le classement"""
-    
-    query = update.callback_query
-    
+async def show_leaderboard(query) -> None:
+    """
+    Affiche le classement
+    Args:
+        query: CallbackQuery de Telegram
+    """
     leaderboard = AdvancedDataManager.get_leaderboard(20)
     formatted = TelegramFormatter.format_leaderboard(leaderboard)
     
@@ -1916,13 +1934,12 @@ async def show_leaderboard(
         reply_markup=keyboard
     )
 
-async def show_prediction_history(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Affiche l'historique des prédictions"""
-    
-    query = update.callback_query
+async def show_prediction_history(query) -> None:
+    """
+    Affiche l'historique des prédictions
+    Args:
+        query: CallbackQuery de Telegram
+    """
     user = query.from_user
     
     predictions = AdvancedDataManager.get_user_predictions(user.id, 10)
