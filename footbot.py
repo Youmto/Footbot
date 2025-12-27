@@ -66,7 +66,7 @@ except ImportError as e:
     logger.warning(f"⚠️ Module prédictions V4 non disponible: {e}")
     
     try:
-        from prediction_module_v2 import (
+        from prediction_module import (
             handle_prediction_request,
             handle_vote,
             show_community_votes,
