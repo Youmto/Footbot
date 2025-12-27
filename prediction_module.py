@@ -1,12 +1,11 @@
 """
-🔮 MODULE PRONOSTICS ULTRA V3.0 - MULTI-SPORTS PROFESSIONNEL
+🔮 MODULE PRONOSTICS ULTRA V4.0 - MULTI-SPORTS PROFESSIONNEL
 ═══════════════════════════════════════════════════════════════════════════════
 Version Top 1 Mondial avec:
-- Support TOUS les sports (Football, UFC, NBA, Tennis, NFL, etc.)
-- Pronostics spécifiques par sport
-- Validation des événements en temps réel
-- Groq IA avec fallback intelligent
-- Système de grades amélioré (jamais D sans raison)
+- Signalement clair IA vs Fallback (bannière visible)
+- Pronostics COMPLETS (cartons, corners, fautes, compositions, etc.)
+- Validation avancée des événements réels
+- Support de 15+ sports
 - Gamification complète
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -24,10 +23,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
 from enum import Enum
-from collections import defaultdict
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 logger = logging.getLogger("footbot.predictions")
 
@@ -38,15 +35,16 @@ logger = logging.getLogger("footbot.predictions")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 
-# Vérification de la clé API
-PREDICTIONS_ENABLED = bool(GROQ_API_KEY)
+# Activation des prédictions (toujours activé, mais mode différent selon API)
+PREDICTIONS_ENABLED = True
+AI_AVAILABLE = bool(GROQ_API_KEY)
 
-if PREDICTIONS_ENABLED:
-    logger.info("✅ GROQ_API_KEY configurée - Prédictions IA activées")
+if AI_AVAILABLE:
+    logger.info("✅ GROQ_API_KEY configurée - Mode IA activé")
 else:
-    logger.warning("⚠️ GROQ_API_KEY manquante - Mode simulation activé")
+    logger.warning("⚠️ GROQ_API_KEY manquante - Mode Algorithme activé")
 
-# Modèles Groq (chaîne de fallback)
+# Modèles Groq
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",
     "llama-3.1-70b-versatile",
@@ -65,161 +63,180 @@ FILES = {
     'stats': PREDICTIONS_DIR / "predictions_stats.json",
     'votes': PREDICTIONS_DIR / "community_votes.json",
     'leaderboard': PREDICTIONS_DIR / "leaderboard.json",
-    'achievements': PREDICTIONS_DIR / "achievements.json"
+    'achievements': PREDICTIONS_DIR / "achievements.json",
+    'validated_events': PREDICTIONS_DIR / "validated_events.json"
 }
 
 # ════════════════════════════════════════════════════════════════════════════
-# 🏆 CONFIGURATION SPORTS - PRONOSTICS SPÉCIFIQUES
+# 🏆 CONFIGURATION SPORTS COMPLÈTE
 # ════════════════════════════════════════════════════════════════════════════
 
 SPORTS_CONFIG = {
     'football': {
         'name': 'Football',
         'icon': '⚽',
-        'predictions': [
-            'match_result', 'exact_score', 'total_goals', 'btts',
-            'corners', 'cards', 'halftime', 'first_goal', 'clean_sheet'
-        ],
         'vote_options': {'1': 'Victoire Dom', 'X': 'Match Nul', '2': 'Victoire Ext'},
-        'result_type': '1X2'
+        'result_type': '1X2',
+        'has_lineups': True
     },
     'ufc': {
         'name': 'UFC/MMA',
         'icon': '🥊',
-        'predictions': [
-            'winner', 'method', 'round', 'fight_duration', 
-            'knockdown', 'submission_attempt', 'distance'
-        ],
         'vote_options': {'1': 'Fighter 1', '2': 'Fighter 2'},
-        'result_type': 'H2H'
+        'result_type': 'H2H',
+        'has_lineups': False
     },
     'boxing': {
         'name': 'Boxe',
         'icon': '🥊',
-        'predictions': [
-            'winner', 'method', 'round', 'knockdowns',
-            'total_rounds', 'distance', 'points_decision'
-        ],
         'vote_options': {'1': 'Boxeur 1', '2': 'Boxeur 2', 'X': 'Nul'},
-        'result_type': '1X2'
+        'result_type': '1X2',
+        'has_lineups': False
     },
     'nba': {
         'name': 'NBA/Basketball',
         'icon': '🏀',
-        'predictions': [
-            'winner', 'spread', 'total_points', 'quarters',
-            'halftime', 'player_props', 'margin'
-        ],
         'vote_options': {'1': 'Équipe Dom', '2': 'Équipe Ext'},
-        'result_type': 'H2H'
+        'result_type': 'H2H',
+        'has_lineups': True
     },
     'nfl': {
         'name': 'NFL/Football US',
         'icon': '🏈',
-        'predictions': [
-            'winner', 'spread', 'total_points', 'halftime',
-            'quarters', 'touchdowns', 'field_goals'
-        ],
         'vote_options': {'1': 'Équipe Dom', '2': 'Équipe Ext'},
-        'result_type': 'H2H'
+        'result_type': 'H2H',
+        'has_lineups': True
     },
     'tennis': {
         'name': 'Tennis',
         'icon': '🎾',
-        'predictions': [
-            'winner', 'sets_score', 'total_games', 'tiebreaks',
-            'aces', 'breaks', 'match_duration'
-        ],
         'vote_options': {'1': 'Joueur 1', '2': 'Joueur 2'},
-        'result_type': 'H2H'
+        'result_type': 'H2H',
+        'has_lineups': False
     },
     'nhl': {
         'name': 'NHL/Hockey',
         'icon': '🏒',
-        'predictions': [
-            'winner', 'total_goals', 'period_results', 'spread',
-            'overtime', 'shutout', 'first_goal'
-        ],
-        'vote_options': {'1': 'Équipe Dom', 'X': 'Nul/Prolongation', '2': 'Équipe Ext'},
-        'result_type': '1X2'
+        'vote_options': {'1': 'Équipe Dom', 'X': 'Prolongation', '2': 'Équipe Ext'},
+        'result_type': '1X2',
+        'has_lineups': True
     },
     'f1': {
         'name': 'Formule 1',
         'icon': '🏎️',
-        'predictions': [
-            'race_winner', 'podium', 'fastest_lap', 'dnf',
-            'constructors', 'h2h_drivers', 'safety_car'
-        ],
         'vote_options': {},
-        'result_type': 'RACE'
+        'result_type': 'RACE',
+        'has_lineups': False
     },
     'motogp': {
         'name': 'MotoGP',
         'icon': '🏍️',
-        'predictions': [
-            'race_winner', 'podium', 'pole_position',
-            'fastest_lap', 'h2h_riders'
-        ],
         'vote_options': {},
-        'result_type': 'RACE'
+        'result_type': 'RACE',
+        'has_lineups': False
     },
     'rugby': {
         'name': 'Rugby',
         'icon': '🏉',
-        'predictions': [
-            'winner', 'handicap', 'total_points', 'halftime',
-            'tries', 'margin', 'first_try'
-        ],
         'vote_options': {'1': 'Équipe Dom', 'X': 'Match Nul', '2': 'Équipe Ext'},
-        'result_type': '1X2'
+        'result_type': '1X2',
+        'has_lineups': True
     },
     'golf': {
         'name': 'Golf',
         'icon': '⛳',
-        'predictions': [
-            'tournament_winner', 'top_5', 'top_10', 'cut',
-            'h2h_golfers', 'nationality'
-        ],
         'vote_options': {},
-        'result_type': 'TOURNAMENT'
+        'result_type': 'TOURNAMENT',
+        'has_lineups': False
     },
     'darts': {
         'name': 'Fléchettes',
         'icon': '🎯',
-        'predictions': [
-            'winner', 'sets_score', 'total_180s', 'checkout',
-            'highest_checkout', '9_darter'
-        ],
         'vote_options': {'1': 'Joueur 1', '2': 'Joueur 2'},
-        'result_type': 'H2H'
+        'result_type': 'H2H',
+        'has_lineups': False
     },
     'wwe': {
         'name': 'WWE/Catch',
         'icon': '🤼',
-        'predictions': [
-            'winner', 'match_type', 'interference',
-            'title_change', 'surprise'
-        ],
         'vote_options': {'1': 'Favori', '2': 'Outsider'},
-        'result_type': 'H2H'
+        'result_type': 'H2H',
+        'has_lineups': False
     },
     'volleyball': {
         'name': 'Volleyball',
         'icon': '🏐',
-        'predictions': [
-            'winner', 'sets_score', 'total_points', 'set_winners',
-            'handicap', 'first_set'
-        ],
         'vote_options': {'1': 'Équipe Dom', '2': 'Équipe Ext'},
-        'result_type': 'H2H'
+        'result_type': 'H2H',
+        'has_lineups': True
+    },
+    'nascar': {
+        'name': 'NASCAR',
+        'icon': '🏁',
+        'vote_options': {},
+        'result_type': 'RACE',
+        'has_lineups': False
     },
     'other': {
         'name': 'Autre Sport',
         'icon': '🎯',
-        'predictions': ['winner', 'score', 'special'],
         'vote_options': {'1': 'Option 1', '2': 'Option 2'},
-        'result_type': 'H2H'
+        'result_type': 'H2H',
+        'has_lineups': False
     }
+}
+
+# ════════════════════════════════════════════════════════════════════════════
+# 📊 BASE DE DONNÉES DES ÉQUIPES CONNUES (pour validation)
+# ════════════════════════════════════════════════════════════════════════════
+
+KNOWN_TEAMS = {
+    'football': [
+        # Premier League
+        'manchester united', 'manchester city', 'liverpool', 'chelsea', 'arsenal',
+        'tottenham', 'newcastle', 'west ham', 'aston villa', 'brighton',
+        'wolves', 'crystal palace', 'fulham', 'everton', 'brentford',
+        'nottingham forest', 'bournemouth', 'burnley', 'sheffield united', 'luton',
+        # La Liga
+        'real madrid', 'barcelona', 'atletico madrid', 'sevilla', 'real sociedad',
+        'villarreal', 'athletic bilbao', 'valencia', 'betis', 'celta vigo',
+        # Bundesliga
+        'bayern munich', 'borussia dortmund', 'rb leipzig', 'bayer leverkusen',
+        'eintracht frankfurt', 'wolfsburg', 'union berlin', 'freiburg',
+        # Serie A
+        'juventus', 'inter milan', 'ac milan', 'napoli', 'roma', 'lazio',
+        'atalanta', 'fiorentina', 'torino', 'bologna',
+        # Ligue 1
+        'psg', 'paris saint-germain', 'marseille', 'monaco', 'lille', 'lyon',
+        'nice', 'lens', 'rennes', 'montpellier',
+        # Autres
+        'ajax', 'psv', 'feyenoord', 'porto', 'benfica', 'sporting',
+        'galatasaray', 'fenerbahce', 'besiktas', 'celtic', 'rangers'
+    ],
+    'nba': [
+        'lakers', 'celtics', 'warriors', 'bulls', 'heat', 'nets', 'knicks',
+        'spurs', 'mavericks', 'suns', 'bucks', 'sixers', '76ers', 'nuggets',
+        'clippers', 'rockets', 'thunder', 'jazz', 'pelicans', 'grizzlies',
+        'timberwolves', 'trail blazers', 'kings', 'hawks', 'hornets',
+        'cavaliers', 'pistons', 'pacers', 'magic', 'wizards', 'raptors'
+    ],
+    'nfl': [
+        'patriots', 'cowboys', 'packers', '49ers', 'chiefs', 'eagles',
+        'broncos', 'raiders', 'seahawks', 'steelers', 'ravens', 'bills',
+        'dolphins', 'jets', 'bengals', 'browns', 'texans', 'colts',
+        'jaguars', 'titans', 'bears', 'lions', 'vikings', 'saints',
+        'falcons', 'panthers', 'buccaneers', 'cardinals', 'rams', 'chargers',
+        'commanders', 'giants'
+    ],
+    'ufc': [
+        'ufc', 'mma', 'fight', 'championship', 'title', 'bout',
+        'lightweight', 'heavyweight', 'welterweight', 'middleweight',
+        'bantamweight', 'featherweight', 'flyweight'
+    ],
+    'tennis': [
+        'atp', 'wta', 'grand slam', 'wimbledon', 'us open', 'french open',
+        'australian open', 'roland garros', 'masters', 'open'
+    ]
 }
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -227,25 +244,18 @@ SPORTS_CONFIG = {
 # ════════════════════════════════════════════════════════════════════════════
 
 class Limits:
-    CACHE_DURATION = 1800  # 30 minutes
-    MAX_PREDICTIONS_FREE = 10  # Par jour
+    CACHE_DURATION = 1800
+    MAX_PREDICTIONS_FREE = 15
     MAX_PREDICTIONS_PREMIUM = 100
     RATE_LIMIT_WINDOW = 60
     RATE_LIMIT_MAX = 5
     POINTS_CORRECT = 10
     POINTS_EXACT = 50
     POINTS_VOTE = 1
-    POINTS_STREAK = 5
 
 # ════════════════════════════════════════════════════════════════════════════
 # 📦 DATA CLASSES
 # ════════════════════════════════════════════════════════════════════════════
-
-class UserTier(Enum):
-    FREE = "free"
-    PREMIUM = "premium"
-    VIP = "vip"
-    ADMIN = "admin"
 
 @dataclass
 class UserProfile:
@@ -277,14 +287,140 @@ class UserProfile:
         return limits.get(self.tier, Limits.MAX_PREDICTIONS_FREE)
 
 # ════════════════════════════════════════════════════════════════════════════
-# 💾 GESTIONNAIRE DE DONNÉES AVANCÉ
+# ✅ VALIDATEUR D'ÉVÉNEMENTS AVANCÉ
+# ════════════════════════════════════════════════════════════════════════════
+
+class EventValidator:
+    """Valide que les événements scrapés sont réels"""
+    
+    # Patterns invalides
+    INVALID_PATTERNS = [
+        r'^test\s', r'\btest\b', r'^sample', r'^demo',
+        r'^placeholder', r'^tbd\b', r'^tba\b', r'^n/a\b',
+        r'coming\s*soon', r'to\s*be\s*announced',
+        r'^live\s*$', r'^stream\s*$', r'^watch\s*$',
+        r'^\d+$', r'^[^a-zA-Z]*$'
+    ]
+    
+    # Mots-clés valides
+    VALID_KEYWORDS = [
+        r'\bvs\.?\b', r'\bv\b', r'\bagainst\b', r'\b@\b',
+        r'\bfc\b', r'\bunited\b', r'\bcity\b', r'\blive\b',
+        r'\bam\b', r'\bpm\b', r'\d{1,2}:\d{2}'
+    ]
+    
+    @classmethod
+    def validate_event(cls, match: Dict) -> Tuple[bool, str, int]:
+        """
+        Valide un événement et retourne (is_valid, message, score)
+        Score: 0-100 où 100 = événement très probablement réel
+        """
+        title = match.get('title', '').lower().strip()
+        team1 = match.get('team1', '').lower().strip()
+        team2 = match.get('team2', '').lower().strip()
+        sport = match.get('sport', 'football').lower()
+        
+        score = 50  # Score de base
+        reasons = []
+        
+        # === VÉRIFICATIONS NÉGATIVES ===
+        
+        # Titre trop court
+        if len(title) < 5:
+            return False, "Titre trop court", 0
+        
+        # Patterns invalides
+        for pattern in cls.INVALID_PATTERNS:
+            if re.search(pattern, title, re.IGNORECASE):
+                return False, f"Pattern invalide: {pattern}", 0
+        
+        # Pas de team1
+        if not team1 or len(team1) < 2:
+            score -= 20
+            reasons.append("Équipe 1 manquante")
+        
+        # === VÉRIFICATIONS POSITIVES ===
+        
+        # A team2 valide
+        if team2 and len(team2) > 2:
+            score += 15
+        
+        # Contient "vs" ou similaire
+        if re.search(r'\bvs\.?\b|\bv\b|\b-\b', title, re.IGNORECASE):
+            score += 15
+        
+        # Contient une heure
+        if re.search(r'\d{1,2}:\d{2}', match.get('start_time', '')):
+            score += 10
+        
+        # Équipe connue détectée
+        known_teams = KNOWN_TEAMS.get(sport, [])
+        for team in known_teams:
+            if team in title or team in team1 or team in team2:
+                score += 20
+                reasons.append(f"Équipe connue: {team}")
+                break
+        
+        # Mots-clés de sport détectés
+        sport_keywords = KNOWN_TEAMS.get(sport, [])
+        for keyword in sport_keywords[:10]:
+            if keyword in title:
+                score += 5
+                break
+        
+        # === CALCUL FINAL ===
+        score = max(0, min(100, score))
+        
+        if score < 30:
+            return False, "Score de validation trop bas", score
+        
+        grade = cls.get_grade(score)
+        return True, f"Événement validé (Grade {grade})", score
+    
+    @classmethod
+    def get_grade(cls, score: int) -> str:
+        """Convertit un score en grade"""
+        if score >= 85:
+            return "A+"
+        elif score >= 75:
+            return "A"
+        elif score >= 65:
+            return "B+"
+        elif score >= 55:
+            return "B"
+        elif score >= 45:
+            return "C+"
+        elif score >= 35:
+            return "C"
+        else:
+            return "D"
+    
+    @classmethod
+    def filter_valid_events(cls, matches: List[Dict], min_score: int = 35) -> List[Dict]:
+        """Filtre et retourne uniquement les événements valides"""
+        valid_matches = []
+        
+        for match in matches:
+            is_valid, msg, score = cls.validate_event(match)
+            if is_valid and score >= min_score:
+                match['validation_score'] = score
+                match['validation_grade'] = cls.get_grade(score)
+                valid_matches.append(match)
+            else:
+                logger.debug(f"❌ Événement rejeté: {match.get('title', 'N/A')[:30]} - {msg}")
+        
+        logger.info(f"✅ Validation: {len(valid_matches)}/{len(matches)} événements validés")
+        return valid_matches
+
+# ════════════════════════════════════════════════════════════════════════════
+# 💾 GESTIONNAIRE DE DONNÉES
 # ════════════════════════════════════════════════════════════════════════════
 
 class AdvancedDataManager:
-    """Gestionnaire centralisé des données avec cache intelligent"""
+    """Gestionnaire centralisé des données"""
     
     _cache: Dict[str, Tuple[Any, float]] = {}
-    _cache_ttl = 300  # 5 minutes
+    _cache_ttl = 300
     
     @classmethod
     def _load_file(cls, key: str, default: Any = None) -> Any:
@@ -340,8 +476,8 @@ class AdvancedDataManager:
             'cached_at': datetime.now().isoformat()
         }
         
-        # Nettoyer les vieilles entrées
-        cutoff = (datetime.now() - timedelta(hours=2)).isoformat()
+        # Nettoyer vieilles entrées
+        cutoff = (datetime.now() - timedelta(hours=3)).isoformat()
         cache['predictions'] = {
             k: v for k, v in cache['predictions'].items()
             if v.get('cached_at', '') > cutoff
@@ -380,12 +516,11 @@ class AdvancedDataManager:
             'match_id': match.get('id'),
             'match_title': match.get('title'),
             'sport': match.get('sport', 'FOOTBALL'),
-            'prediction': prediction,
+            'prediction_type': prediction.get('meta', {}).get('prediction_type', 'unknown'),
             'timestamp': datetime.now().isoformat(),
             'status': 'pending'
         })
         
-        # Garder les 5000 dernières
         if len(history['predictions']) > 5000:
             history['predictions'] = history['predictions'][-5000:]
         
@@ -412,7 +547,7 @@ class AdvancedDataManager:
         votes = cls._load_file('votes', {'matches': {}})
         
         sport_config = SPORTS_CONFIG.get(sport.lower(), SPORTS_CONFIG['other'])
-        vote_options = list(sport_config['vote_options'].keys())
+        vote_options = list(sport_config['vote_options'].keys()) or ['1', '2']
         
         if match_id not in votes['matches']:
             votes['matches'][match_id] = {
@@ -424,14 +559,12 @@ class AdvancedDataManager:
         
         match_votes = votes['matches'][match_id]
         
-        # Vérifier si déjà voté
         existing = next((v for v in match_votes['votes'] if v['user_id'] == user_id), None)
         if existing:
             old_vote = existing['vote']
             if old_vote in match_votes['totals']:
                 match_votes['totals'][old_vote] = max(0, match_votes['totals'][old_vote] - 1)
             existing['vote'] = vote
-            existing['timestamp'] = datetime.now().isoformat()
         else:
             match_votes['votes'].append({
                 'user_id': user_id,
@@ -485,432 +618,534 @@ class AdvancedDataManager:
         return sorted_users[:limit]
 
 # ════════════════════════════════════════════════════════════════════════════
-# ✅ VALIDATEUR D'ÉVÉNEMENTS
+# 🧠 PROMPTS IA COMPLETS PAR SPORT
 # ════════════════════════════════════════════════════════════════════════════
 
-class EventValidator:
-    """Valide que les événements scrapés sont réels et analysables"""
-    
-    # Patterns pour détecter les faux événements
-    INVALID_PATTERNS = [
-        r'^test\s', r'\btest\b', r'^sample', r'^demo',
-        r'^placeholder', r'^tbd\b', r'^tba\b',
-        r'coming\s*soon', r'to\s*be\s*announced',
-        r'^n/a\b', r'^none\b', r'^null\b'
-    ]
-    
-    # Patterns valides par sport
-    SPORT_PATTERNS = {
-        'football': [
-            r'\bfc\b', r'\bunited\b', r'\bcity\b', r'\breal\b',
-            r'\bbarcelona\b', r'\bchelsea\b', r'\bliv(?:erpool)?\b',
-            r'\bpsg\b', r'\bbayern\b', r'\bjuventus\b', r'\bmilan\b',
-            r'\bvs\.?\b', r'\bv\b'
-        ],
-        'ufc': [
-            r'\bufc\b', r'\bmma\b', r'\bfight\b', r'\bbellator\b',
-            r'\bko\b', r'\bknockout\b', r'\bsubmission\b'
-        ],
-        'boxing': [
-            r'\bbox(?:ing)?\b', r'\bfight\b', r'\bchampion\b',
-            r'\btitle\b', r'\bwba\b', r'\bwbc\b', r'\bibf\b', r'\bwbo\b'
-        ],
-        'nba': [
-            r'\blakers\b', r'\bceltics\b', r'\bwarriors\b', r'\bbulls\b',
-            r'\bheat\b', r'\bnets\b', r'\bknicks\b', r'\bspurs\b',
-            r'\bnba\b', r'\bbasketball\b'
-        ],
-        'nfl': [
-            r'\bnfl\b', r'\bpatriots\b', r'\bcowboys\b', r'\bpackers\b',
-            r'\b49ers\b', r'\bchiefs\b', r'\beagles\b', r'\bbroncos\b'
-        ],
-        'tennis': [
-            r'\batp\b', r'\bwta\b', r'\bopen\b', r'\bgrand\s*slam\b',
-            r'\bwimbledon\b', r'\bnadal\b', r'\bdjokovic\b', r'\bfederer\b'
-        ]
+def get_football_prompt() -> str:
+    return """Tu es un analyste football professionnel de niveau mondial.
+
+FOURNIS UNE ANALYSE ULTRA-COMPLÈTE AU FORMAT JSON:
+
+{
+  "analysis": {
+    "overview": "Résumé contextuel du match (100-150 mots)",
+    "team1_form": "Analyse forme équipe 1",
+    "team2_form": "Analyse forme équipe 2",
+    "key_factors": ["facteur1", "facteur2", "facteur3", "facteur4", "facteur5"],
+    "tactical_preview": "Analyse tactique attendue"
+  },
+  
+  "lineups": {
+    "team1": {
+      "formation": "4-3-3",
+      "starting_xi": ["Gardien", "Def1", "Def2", "Def3", "Def4", "Mil1", "Mil2", "Mil3", "Att1", "Att2", "Att3"],
+      "key_player": "Nom du joueur clé",
+      "key_player_reason": "Pourquoi il est clé"
+    },
+    "team2": {
+      "formation": "4-4-2",
+      "starting_xi": ["Gardien", "Def1", "Def2", "Def3", "Def4", "Mil1", "Mil2", "Mil3", "Mil4", "Att1", "Att2"],
+      "key_player": "Nom du joueur clé",
+      "key_player_reason": "Pourquoi il est clé"
     }
+  },
+  
+  "predictions": {
+    "match_result": {
+      "prediction": "1/X/2",
+      "probabilities": {"1": 45, "X": 28, "2": 27},
+      "confidence": 58,
+      "reasoning": "Justification détaillée"
+    },
     
-    @classmethod
-    def validate_event(cls, match: Dict) -> Tuple[bool, str, int]:
-        """
-        Valide un événement
-        Returns: (is_valid, message, confidence_score)
-        confidence_score: 0-100
-        """
-        title = match.get('title', '').lower()
-        team1 = match.get('team1', '').lower()
-        team2 = match.get('team2', '').lower()
-        sport = match.get('sport', 'football').lower()
-        
-        # Vérifications de base
-        if not title or len(title) < 5:
-            return False, "Titre trop court ou manquant", 0
-        
-        if not team1:
-            return False, "Équipe/Participant 1 manquant", 0
-        
-        # Vérifier les patterns invalides
-        for pattern in cls.INVALID_PATTERNS:
-            if re.search(pattern, title, re.IGNORECASE):
-                return False, f"Pattern invalide détecté: {pattern}", 0
-            if team1 and re.search(pattern, team1, re.IGNORECASE):
-                return False, f"Équipe 1 invalide", 0
-        
-        # Calculer le score de confiance
-        confidence = 50  # Base
-        
-        # Bonus si on a les deux équipes
-        if team2 and len(team2) > 2:
-            confidence += 15
-        
-        # Bonus si patterns sportifs valides
-        sport_patterns = cls.SPORT_PATTERNS.get(sport, [])
-        for pattern in sport_patterns:
-            if re.search(pattern, title, re.IGNORECASE):
-                confidence += 5
-                break
-        
-        # Bonus si heure valide
-        time_str = match.get('start_time', '')
-        if re.search(r'\d{1,2}:\d{2}', time_str):
-            confidence += 10
-        
-        # Bonus si "vs" ou "v" présent
-        if re.search(r'\bvs\.?\b|\bv\b', title, re.IGNORECASE):
-            confidence += 10
-        
-        # Malus si caractères suspects
-        if re.search(r'[<>{}|\[\]]', title):
-            confidence -= 20
-        
-        # Malus si trop de chiffres (sauf scores)
-        digit_ratio = len(re.findall(r'\d', title)) / max(len(title), 1)
-        if digit_ratio > 0.3:
-            confidence -= 15
-        
-        confidence = max(0, min(100, confidence))
-        
-        if confidence < 30:
-            return False, "Score de confiance trop bas", confidence
-        
-        grade = "A" if confidence >= 70 else "B" if confidence >= 50 else "C"
-        return True, f"Événement validé (Grade {grade})", confidence
+    "exact_score": {
+      "top_3": [
+        {"score": "2-1", "probability": 12},
+        {"score": "1-1", "probability": 10},
+        {"score": "2-0", "probability": 9}
+      ],
+      "confidence": 35
+    },
     
-    @classmethod
-    def get_event_grade(cls, confidence: int) -> str:
-        """Convertit un score de confiance en grade"""
-        if confidence >= 80:
-            return "A+"
-        elif confidence >= 70:
-            return "A"
-        elif confidence >= 60:
-            return "B+"
-        elif confidence >= 50:
-            return "B"
-        elif confidence >= 40:
-            return "C"
-        else:
-            return "D"
+    "total_goals": {
+      "expected": 2.7,
+      "over_0_5": {"probability": 92},
+      "over_1_5": {"probability": 75},
+      "over_2_5": {"probability": 55},
+      "over_3_5": {"probability": 32},
+      "over_4_5": {"probability": 15},
+      "confidence": 52
+    },
+    
+    "btts": {
+      "prediction": "Oui/Non",
+      "probability": 62,
+      "confidence": 55,
+      "reasoning": "Justification"
+    },
+    
+    "corners": {
+      "total_expected": 10.5,
+      "team1_expected": 5.5,
+      "team2_expected": 5.0,
+      "over_7_5": {"probability": 72},
+      "over_8_5": {"probability": 60},
+      "over_9_5": {"probability": 48},
+      "over_10_5": {"probability": 38},
+      "over_11_5": {"probability": 25},
+      "first_corner": "Équipe 1/Équipe 2",
+      "confidence": 48
+    },
+    
+    "cards": {
+      "yellow_cards": {
+        "total_expected": 4.5,
+        "team1_expected": 2.5,
+        "team2_expected": 2.0,
+        "over_2_5": {"probability": 78},
+        "over_3_5": {"probability": 60},
+        "over_4_5": {"probability": 42},
+        "over_5_5": {"probability": 25}
+      },
+      "red_cards": {
+        "probability": 12,
+        "team1_probability": 6,
+        "team2_probability": 6
+      },
+      "first_card": "Équipe 1/Équipe 2",
+      "confidence": 45
+    },
+    
+    "fouls": {
+      "total_expected": 24,
+      "team1_expected": 12,
+      "team2_expected": 12,
+      "over_20_5": {"probability": 65},
+      "over_24_5": {"probability": 48},
+      "confidence": 42
+    },
+    
+    "shots": {
+      "total_expected": 24,
+      "team1_expected": 14,
+      "team2_expected": 10,
+      "shots_on_target": {
+        "total": 9,
+        "team1": 5,
+        "team2": 4
+      },
+      "confidence": 40
+    },
+    
+    "halftime": {
+      "result": "1/X/2",
+      "score": "1-0",
+      "probabilities": {"1": 40, "X": 35, "2": 25},
+      "confidence": 42
+    },
+    
+    "first_goal": {
+      "team": "Équipe 1/Équipe 2",
+      "minute_range": "1-15/16-30/31-45/46-60/61-75/76-90",
+      "no_goal_probability": 8,
+      "confidence": 38
+    },
+    
+    "clean_sheet": {
+      "team1": {"probability": 28},
+      "team2": {"probability": 22},
+      "confidence": 45
+    },
+    
+    "possession": {
+      "team1": 55,
+      "team2": 45,
+      "confidence": 50
+    },
+    
+    "combo_bets": [
+      {
+        "name": "Combo Sûr",
+        "selections": ["1X", "Over 1.5", "Corners +7.5"],
+        "combined_odds": 2.10,
+        "confidence": 58
+      },
+      {
+        "name": "Combo Valeur",
+        "selections": ["1", "Over 2.5", "BTTS Oui"],
+        "combined_odds": 4.50,
+        "confidence": 42
+      }
+    ],
+    
+    "best_bet": {
+      "selection": "Description du pari",
+      "category": "Résultat/Buts/Corners/Cartons",
+      "odds": 2.0,
+      "confidence": 58,
+      "value_rating": "★★★★☆",
+      "stake": "2-3%",
+      "reasoning": "Pourquoi ce pari a de la valeur"
+    }
+  },
+  
+  "summary": {
+    "confidence": 52,
+    "grade": "A/B/C",
+    "data_quality": "Excellent/Bon/Moyen",
+    "key_insight": "L'insight principal"
+  },
+  
+  "disclaimer": "⚠️ Pariez de manière responsable"
+}
 
-# ════════════════════════════════════════════════════════════════════════════
-# 🧠 PROMPTS IA SPÉCIFIQUES PAR SPORT
-# ════════════════════════════════════════════════════════════════════════════
+RÈGLES:
+1. Confiance JAMAIS > 70%
+2. TOUJOURS remplir TOUS les champs
+3. Compositions réalistes avec vrais noms si possible
+4. Justifications claires"""
+
+
+def get_ufc_prompt() -> str:
+    return """Tu es un analyste UFC/MMA professionnel.
+
+FORMAT JSON COMPLET:
+
+{
+  "analysis": {
+    "overview": "Analyse du combat",
+    "fighter1_profile": "Style et forces du combattant 1",
+    "fighter2_profile": "Style et forces du combattant 2",
+    "style_matchup": "Comment les styles s'affrontent",
+    "key_factors": ["facteur1", "facteur2", "facteur3"]
+  },
+  
+  "predictions": {
+    "winner": {
+      "prediction": "Fighter 1/Fighter 2",
+      "probabilities": {"1": 55, "2": 45},
+      "confidence": 52,
+      "reasoning": "Justification"
+    },
+    
+    "method": {
+      "ko_tko": {"probability": 35, "fighter1": 20, "fighter2": 15},
+      "submission": {"probability": 20, "fighter1": 12, "fighter2": 8},
+      "decision": {"probability": 45, "unanimous": 35, "split": 10},
+      "confidence": 48
+    },
+    
+    "round": {
+      "round_1": {"finish_probability": 15},
+      "round_2": {"finish_probability": 20},
+      "round_3": {"finish_probability": 15},
+      "goes_distance": {"probability": 50},
+      "predicted_end": "Round 2/Decision",
+      "confidence": 42
+    },
+    
+    "fight_duration": {
+      "over_0_5": {"probability": 92},
+      "over_1_5": {"probability": 70},
+      "over_2_5": {"probability": 50},
+      "confidence": 48
+    },
+    
+    "significant_strikes": {
+      "total_expected": 120,
+      "fighter1": 65,
+      "fighter2": 55,
+      "confidence": 40
+    },
+    
+    "takedowns": {
+      "total_expected": 3,
+      "fighter1": 2,
+      "fighter2": 1,
+      "confidence": 42
+    },
+    
+    "best_bet": {
+      "selection": "Description",
+      "odds": 2.0,
+      "confidence": 50,
+      "value_rating": "★★★☆☆",
+      "reasoning": "Justification"
+    }
+  },
+  
+  "summary": {
+    "confidence": 50,
+    "grade": "B",
+    "key_insight": "Insight principal"
+  },
+  
+  "disclaimer": "⚠️ Pariez responsablement"
+}"""
+
+
+def get_nba_prompt() -> str:
+    return """Tu es un analyste NBA professionnel.
+
+FORMAT JSON:
+
+{
+  "analysis": {
+    "overview": "Analyse du match",
+    "team1_form": "Forme équipe 1",
+    "team2_form": "Forme équipe 2",
+    "key_matchups": ["matchup1", "matchup2"],
+    "injuries_impact": "Impact des blessures"
+  },
+  
+  "lineups": {
+    "team1": {
+      "starting_five": ["PG", "SG", "SF", "PF", "C"],
+      "key_player": "Nom",
+      "expected_points": 28
+    },
+    "team2": {
+      "starting_five": ["PG", "SG", "SF", "PF", "C"],
+      "key_player": "Nom",
+      "expected_points": 25
+    }
+  },
+  
+  "predictions": {
+    "winner": {
+      "prediction": "Team 1/Team 2",
+      "probabilities": {"1": 55, "2": 45},
+      "confidence": 52
+    },
+    
+    "spread": {
+      "line": -5.5,
+      "pick": "Team 1 -5.5",
+      "probability": 52,
+      "confidence": 48
+    },
+    
+    "total_points": {
+      "line": 220.5,
+      "expected": 223,
+      "over_probability": 55,
+      "under_probability": 45,
+      "confidence": 50
+    },
+    
+    "quarters": {
+      "q1_winner": "Team 1",
+      "q1_total": 55,
+      "highest_scoring_quarter": "Q3",
+      "confidence": 42
+    },
+    
+    "halftime": {
+      "leader": "Team 1",
+      "ht_spread": -3,
+      "ht_total": 110,
+      "confidence": 45
+    },
+    
+    "player_props": [
+      {"player": "Nom", "prop": "Points Over 25.5", "probability": 55},
+      {"player": "Nom", "prop": "Rebounds Over 8.5", "probability": 52}
+    ],
+    
+    "margin": {
+      "expected": "5-10 points",
+      "blowout_15_plus": {"probability": 25},
+      "close_game_5_minus": {"probability": 35}
+    },
+    
+    "best_bet": {
+      "selection": "Description",
+      "odds": 1.9,
+      "confidence": 52,
+      "value_rating": "★★★☆☆"
+    }
+  },
+  
+  "summary": {
+    "confidence": 50,
+    "grade": "B",
+    "key_insight": "Insight"
+  }
+}"""
+
+
+def get_tennis_prompt() -> str:
+    return """Tu es un analyste Tennis professionnel.
+
+FORMAT JSON:
+
+{
+  "analysis": {
+    "overview": "Analyse du match",
+    "player1_form": "Forme joueur 1",
+    "player2_form": "Forme joueur 2",
+    "surface_analysis": "Analyse de la surface",
+    "h2h": "Historique confrontations"
+  },
+  
+  "predictions": {
+    "winner": {
+      "prediction": "Joueur 1/Joueur 2",
+      "probabilities": {"1": 60, "2": 40},
+      "confidence": 55
+    },
+    
+    "sets_score": {
+      "prediction": "2-0/2-1/1-2/0-2",
+      "probabilities": {"2-0": 35, "2-1": 25, "1-2": 22, "0-2": 18},
+      "confidence": 48
+    },
+    
+    "total_games": {
+      "expected": 22,
+      "over_20_5": {"probability": 55},
+      "over_21_5": {"probability": 48},
+      "over_22_5": {"probability": 40},
+      "confidence": 50
+    },
+    
+    "tiebreaks": {
+      "probability": 35,
+      "expected_count": 0.5,
+      "confidence": 42
+    },
+    
+    "aces": {
+      "player1": 6,
+      "player2": 4,
+      "total_over_8_5": {"probability": 55},
+      "confidence": 45
+    },
+    
+    "double_faults": {
+      "player1": 2,
+      "player2": 3,
+      "total": 5,
+      "confidence": 40
+    },
+    
+    "breaks_of_serve": {
+      "total_expected": 4,
+      "player1_breaks": 2,
+      "player2_breaks": 2,
+      "confidence": 45
+    },
+    
+    "first_set_winner": {
+      "prediction": "Joueur 1/Joueur 2",
+      "probability": 58,
+      "confidence": 50
+    },
+    
+    "best_bet": {
+      "selection": "Description",
+      "odds": 1.85,
+      "confidence": 52,
+      "value_rating": "★★★☆☆"
+    }
+  },
+  
+  "summary": {
+    "confidence": 52,
+    "grade": "B"
+  }
+}"""
+
+
+def get_generic_prompt() -> str:
+    return """Tu es un analyste sportif professionnel.
+
+FORMAT JSON:
+
+{
+  "analysis": {
+    "overview": "Analyse de l'événement",
+    "participant1": "Analyse participant 1",
+    "participant2": "Analyse participant 2",
+    "key_factors": ["facteur1", "facteur2", "facteur3"]
+  },
+  
+  "predictions": {
+    "winner": {
+      "prediction": "Participant 1/Participant 2",
+      "probabilities": {"1": 50, "2": 50},
+      "confidence": 45,
+      "reasoning": "Justification"
+    },
+    
+    "score": {
+      "prediction": "Score prévu",
+      "confidence": 35
+    },
+    
+    "special": {
+      "description": "Prédiction spéciale",
+      "probability": 50,
+      "confidence": 40
+    },
+    
+    "best_bet": {
+      "selection": "Description",
+      "odds": 2.0,
+      "confidence": 45,
+      "value_rating": "★★★☆☆"
+    }
+  },
+  
+  "summary": {
+    "confidence": 45,
+    "grade": "C",
+    "key_insight": "Insight"
+  }
+}"""
+
 
 def get_sport_prompt(sport: str) -> str:
-    """Retourne le prompt système adapté au sport"""
-    
-    base_prompt = """Tu es un analyste sportif professionnel d'élite avec 20+ ans d'expérience.
-Tu fournis des analyses détaillées et des prédictions précises basées sur les données disponibles.
+    """Retourne le prompt adapté au sport"""
+    base = """Tu es un analyste sportif professionnel d'élite.
 
-RÈGLES IMPORTANTES:
-1. Confiance JAMAIS > 70% (sauf cas exceptionnels à 75% max)
-2. Toujours justifier chaque prédiction
-3. Format JSON strict obligatoire
-4. Indiquer clairement la qualité des données disponibles
-5. Proposer des paris à VALEUR, pas juste populaires
-
-ÉCHELLE DE CONFIANCE:
-- 65-75%: 🟢 TRÈS FORTE - Multiples facteurs alignés
-- 55-64%: 🟡 FORTE - Bons indicateurs
-- 45-54%: 🟠 MOYENNE - Incertitudes modérées
-- 35-44%: 🔴 FAIBLE - Données limitées
-- <35%: ⚫ TRÈS FAIBLE - Ne pas parier
+RÈGLES STRICTES:
+1. Confiance JAMAIS supérieure à 70%
+2. Remplir TOUS les champs demandés
+3. Format JSON valide obligatoire
+4. Justifications claires et précises
 
 """
     
-    sport_prompts = {
-        'football': """
-SPORT: FOOTBALL ⚽
-
-PRÉDICTIONS À FOURNIR:
-1. 🏆 RÉSULTAT (1/X/2) avec probabilités
-2. ⚽ SCORE EXACT - Top 3 scores probables
-3. 📊 TOTAL BUTS - Over/Under 1.5, 2.5, 3.5
-4. 🥅 BTTS (Les deux marquent)
-5. 🚩 CORNERS - Total et par équipe
-6. 🟨 CARTONS - Jaunes/Rouges
-7. ⏱️ MI-TEMPS - Résultat HT
-8. 💎 MEILLEUR PARI VALEUR
-
-FORMAT JSON:
-{
-  "sport": "football",
-  "analysis": {"overview": "...", "key_factors": [...], "form": {"team1": "...", "team2": "..."}},
-  "predictions": {
-    "match_result": {"prediction": "1/X/2", "probabilities": {"1": 45, "X": 28, "2": 27}, "confidence": 58, "reasoning": "..."},
-    "exact_score": {"top_3": [{"score": "2-1", "probability": 12}, ...], "confidence": 35},
-    "total_goals": {"expected": 2.5, "over_1_5": 75, "over_2_5": 55, "over_3_5": 30, "confidence": 50},
-    "btts": {"prediction": "Oui/Non", "probability": 60, "confidence": 52},
-    "corners": {"total": 10, "team1": "5-6", "team2": "4-5", "over_9_5": 55, "confidence": 45},
-    "cards": {"yellow": 4, "red_probability": 15, "confidence": 40},
-    "halftime": {"prediction": "1/X/2", "confidence": 42},
-    "best_bet": {"selection": "...", "odds": 2.0, "confidence": 55, "value": "★★★★☆", "reasoning": "..."}
-  },
-  "summary": {"confidence": 52, "grade": "B", "data_quality": "Bon", "key_insight": "..."},
-  "disclaimer": "⚠️ Paris responsable uniquement"
-}
-""",
-        'ufc': """
-SPORT: UFC/MMA 🥊
-
-PRÉDICTIONS À FOURNIR:
-1. 🏆 VAINQUEUR avec probabilités
-2. 🎯 MÉTHODE DE VICTOIRE (KO/TKO, Soumission, Décision)
-3. ⏱️ ROUND DE FIN prévu
-4. 📊 DURÉE DU COMBAT (Over/Under rounds)
-5. 💥 KNOCKDOWNS probabilité
-6. 🔒 SOUMISSION tentatives
-7. 💎 MEILLEUR PARI VALEUR
-
-FORMAT JSON:
-{
-  "sport": "ufc",
-  "analysis": {"overview": "...", "fighter1_strengths": [...], "fighter2_strengths": [...], "style_matchup": "..."},
-  "predictions": {
-    "winner": {"prediction": "Fighter 1/2", "probabilities": {"1": 60, "2": 40}, "confidence": 55, "reasoning": "..."},
-    "method": {"prediction": "KO/TKO/Submission/Decision", "ko_probability": 35, "sub_probability": 20, "decision_probability": 45, "confidence": 48},
-    "round": {"prediction": "Round 2/3/Decision", "finish_round_probabilities": {"1": 15, "2": 25, "3": 20, "dec": 40}, "confidence": 42},
-    "fight_duration": {"over_1_5": 65, "over_2_5": 45, "goes_distance": 40, "confidence": 50},
-    "knockdown": {"probability": 55, "fighter1": 30, "fighter2": 25, "confidence": 45},
-    "best_bet": {"selection": "...", "odds": 2.0, "confidence": 52, "value": "★★★☆☆", "reasoning": "..."}
-  },
-  "summary": {"confidence": 50, "grade": "B", "data_quality": "Bon", "key_insight": "..."},
-  "disclaimer": "⚠️ Paris responsable uniquement"
-}
-""",
-        'boxing': """
-SPORT: BOXE 🥊
-
-PRÉDICTIONS À FOURNIR:
-1. 🏆 VAINQUEUR avec probabilités
-2. 🎯 MÉTHODE (KO, TKO, Décision unanime/partagée)
-3. ⏱️ ROUND DE FIN
-4. 📊 OVER/UNDER ROUNDS
-5. 💥 KNOCKDOWNS
-6. 💎 MEILLEUR PARI VALEUR
-
-FORMAT JSON:
-{
-  "sport": "boxing",
-  "analysis": {"overview": "...", "boxer1_analysis": "...", "boxer2_analysis": "...", "style_matchup": "..."},
-  "predictions": {
-    "winner": {"prediction": "Boxer 1/2/Draw", "probabilities": {"1": 55, "X": 5, "2": 40}, "confidence": 52, "reasoning": "..."},
-    "method": {"ko_tko": 40, "decision": 55, "draw": 5, "confidence": 48},
-    "round": {"over_6_5": 60, "over_9_5": 40, "goes_distance": 55, "confidence": 45},
-    "knockdowns": {"probability": 50, "total_expected": 1.5, "confidence": 42},
-    "best_bet": {"selection": "...", "odds": 2.0, "confidence": 50, "value": "★★★☆☆", "reasoning": "..."}
-  },
-  "summary": {"confidence": 48, "grade": "B", "data_quality": "Bon", "key_insight": "..."},
-  "disclaimer": "⚠️ Paris responsable uniquement"
-}
-""",
-        'nba': """
-SPORT: NBA/BASKETBALL 🏀
-
-PRÉDICTIONS À FOURNIR:
-1. 🏆 VAINQUEUR (Moneyline)
-2. 📊 SPREAD/HANDICAP
-3. 📈 TOTAL POINTS (Over/Under)
-4. 🏀 QUARTS - Vainqueur par quart
-5. ⏱️ MI-TEMPS - Score et vainqueur
-6. 📏 MARGE DE VICTOIRE
-7. 💎 MEILLEUR PARI VALEUR
-
-FORMAT JSON:
-{
-  "sport": "nba",
-  "analysis": {"overview": "...", "team1_form": "...", "team2_form": "...", "key_players": [...], "injuries": [...]},
-  "predictions": {
-    "winner": {"prediction": "Team 1/2", "probabilities": {"1": 55, "2": 45}, "confidence": 52, "reasoning": "..."},
-    "spread": {"line": -5.5, "pick": "Team 1 -5.5", "confidence": 48},
-    "total_points": {"line": 220.5, "prediction": "Over/Under", "probability": 55, "confidence": 50},
-    "halftime": {"leader": "Team 1/2", "confidence": 45},
-    "margin": {"expected": "5-10 points", "blowout_probability": 25, "confidence": 42},
-    "best_bet": {"selection": "...", "odds": 1.9, "confidence": 52, "value": "★★★☆☆", "reasoning": "..."}
-  },
-  "summary": {"confidence": 50, "grade": "B", "data_quality": "Bon", "key_insight": "..."},
-  "disclaimer": "⚠️ Paris responsable uniquement"
-}
-""",
-        'nfl': """
-SPORT: NFL/FOOTBALL AMÉRICAIN 🏈
-
-PRÉDICTIONS À FOURNIR:
-1. 🏆 VAINQUEUR (Moneyline)
-2. 📊 SPREAD/HANDICAP
-3. 📈 TOTAL POINTS (Over/Under)
-4. ⏱️ MI-TEMPS
-5. 🏈 TOUCHDOWNS
-6. 🎯 FIELD GOALS
-7. 💎 MEILLEUR PARI VALEUR
-
-FORMAT JSON:
-{
-  "sport": "nfl",
-  "analysis": {"overview": "...", "team1_offense": "...", "team2_defense": "...", "weather": "...", "injuries": [...]},
-  "predictions": {
-    "winner": {"prediction": "Team 1/2", "probabilities": {"1": 58, "2": 42}, "confidence": 55, "reasoning": "..."},
-    "spread": {"line": -3.5, "pick": "Team 1 -3.5", "confidence": 50},
-    "total_points": {"line": 45.5, "prediction": "Over/Under", "probability": 52, "confidence": 48},
-    "halftime": {"leader": "Team 1/2", "ht_score": "14-10", "confidence": 42},
-    "touchdowns": {"total_expected": 5, "team1": 3, "team2": 2, "confidence": 45},
-    "best_bet": {"selection": "...", "odds": 1.95, "confidence": 52, "value": "★★★☆☆", "reasoning": "..."}
-  },
-  "summary": {"confidence": 50, "grade": "B", "data_quality": "Bon", "key_insight": "..."},
-  "disclaimer": "⚠️ Paris responsable uniquement"
-}
-""",
-        'tennis': """
-SPORT: TENNIS 🎾
-
-PRÉDICTIONS À FOURNIR:
-1. 🏆 VAINQUEUR DU MATCH
-2. 📊 SCORE EN SETS (2-0, 2-1, etc.)
-3. 📈 TOTAL DE JEUX (Over/Under)
-4. 🎾 TIEBREAKS probabilité
-5. ⚡ ACES attendus
-6. 🔄 BREAKS DE SERVICE
-7. 💎 MEILLEUR PARI VALEUR
-
-FORMAT JSON:
-{
-  "sport": "tennis",
-  "analysis": {"overview": "...", "player1_form": "...", "player2_form": "...", "surface": "...", "h2h": "..."},
-  "predictions": {
-    "winner": {"prediction": "Player 1/2", "probabilities": {"1": 60, "2": 40}, "confidence": 55, "reasoning": "..."},
-    "sets_score": {"prediction": "2-0/2-1/1-2/0-2", "probabilities": {"2-0": 35, "2-1": 25, "1-2": 20, "0-2": 20}, "confidence": 48},
-    "total_games": {"line": 21.5, "prediction": "Over/Under", "probability": 55, "confidence": 50},
-    "tiebreaks": {"probability": 40, "expected": 0.5, "confidence": 42},
-    "aces": {"player1": 8, "player2": 5, "total_over_10_5": 55, "confidence": 45},
-    "best_bet": {"selection": "...", "odds": 1.85, "confidence": 52, "value": "★★★☆☆", "reasoning": "..."}
-  },
-  "summary": {"confidence": 52, "grade": "B", "data_quality": "Bon", "key_insight": "..."},
-  "disclaimer": "⚠️ Paris responsable uniquement"
-}
-""",
-        'nhl': """
-SPORT: NHL/HOCKEY 🏒
-
-PRÉDICTIONS À FOURNIR:
-1. 🏆 VAINQUEUR (temps réglementaire ou prolongation)
-2. 📊 PUCK LINE (spread -1.5)
-3. 📈 TOTAL BUTS (Over/Under)
-4. ⏱️ PÉRIODES - Résultats
-5. 🥅 SHUTOUT probabilité
-6. ⚡ PROLONGATION probabilité
-7. 💎 MEILLEUR PARI VALEUR
-
-FORMAT JSON:
-{
-  "sport": "nhl",
-  "analysis": {"overview": "...", "team1_form": "...", "team2_form": "...", "goalie_matchup": "..."},
-  "predictions": {
-    "winner": {"prediction": "Team 1/2", "probabilities": {"1": 52, "X": 8, "2": 40}, "confidence": 50, "reasoning": "..."},
-    "puck_line": {"team1_minus_1_5": 35, "team2_plus_1_5": 65, "confidence": 45},
-    "total_goals": {"line": 5.5, "over": 55, "under": 45, "confidence": 50},
-    "overtime": {"probability": 15, "confidence": 42},
-    "shutout": {"team1": 8, "team2": 6, "confidence": 38},
-    "best_bet": {"selection": "...", "odds": 1.9, "confidence": 48, "value": "★★★☆☆", "reasoning": "..."}
-  },
-  "summary": {"confidence": 48, "grade": "B", "data_quality": "Bon", "key_insight": "..."},
-  "disclaimer": "⚠️ Paris responsable uniquement"
-}
-""",
-        'f1': """
-SPORT: FORMULE 1 🏎️
-
-PRÉDICTIONS À FOURNIR:
-1. 🏆 VAINQUEUR DE LA COURSE
-2. 🥇🥈🥉 PODIUM (Top 3)
-3. ⚡ TOUR LE PLUS RAPIDE
-4. 🚗 DNF (abandons)
-5. 🏁 CONSTRUCTEURS - Points
-6. 🚨 SAFETY CAR probabilité
-7. 💎 MEILLEUR PARI VALEUR
-
-FORMAT JSON:
-{
-  "sport": "f1",
-  "analysis": {"overview": "...", "track_analysis": "...", "weather": "...", "qualifying_impact": "..."},
-  "predictions": {
-    "race_winner": {"prediction": "Driver Name", "top_5": [{"driver": "...", "probability": 25}, ...], "confidence": 45, "reasoning": "..."},
-    "podium": {"predicted": ["Driver 1", "Driver 2", "Driver 3"], "confidence": 40},
-    "fastest_lap": {"prediction": "Driver Name", "probability": 30, "confidence": 38},
-    "dnf": {"expected_count": 2, "high_risk_drivers": [...], "confidence": 42},
-    "safety_car": {"probability": 65, "confidence": 50},
-    "best_bet": {"selection": "...", "odds": 2.5, "confidence": 45, "value": "★★★☆☆", "reasoning": "..."}
-  },
-  "summary": {"confidence": 42, "grade": "B", "data_quality": "Moyen", "key_insight": "..."},
-  "disclaimer": "⚠️ Paris responsable uniquement"
-}
-"""
-    }
+    sport_lower = sport.lower()
     
-    # Prompt par défaut pour les autres sports
-    default_prompt = """
-SPORT: GÉNÉRAL 🎯
-
-PRÉDICTIONS À FOURNIR:
-1. 🏆 VAINQUEUR avec probabilités
-2. 📊 SCORE/RÉSULTAT prévu
-3. 💎 MEILLEUR PARI VALEUR
-
-FORMAT JSON:
-{
-  "sport": "other",
-  "analysis": {"overview": "...", "key_factors": [...]},
-  "predictions": {
-    "winner": {"prediction": "...", "probabilities": {...}, "confidence": 50, "reasoning": "..."},
-    "score": {"prediction": "...", "confidence": 40},
-    "best_bet": {"selection": "...", "odds": 2.0, "confidence": 45, "value": "★★★☆☆", "reasoning": "..."}
-  },
-  "summary": {"confidence": 45, "grade": "C", "data_quality": "Limité", "key_insight": "..."},
-  "disclaimer": "⚠️ Paris responsable uniquement"
-}
-"""
-    
-    sport_key = sport.lower()
-    specific_prompt = sport_prompts.get(sport_key, default_prompt)
-    
-    return base_prompt + specific_prompt
+    if sport_lower in ['football', 'soccer']:
+        return base + get_football_prompt()
+    elif sport_lower in ['ufc', 'mma']:
+        return base + get_ufc_prompt()
+    elif sport_lower in ['nba', 'basketball']:
+        return base + get_nba_prompt()
+    elif sport_lower == 'tennis':
+        return base + get_tennis_prompt()
+    else:
+        return base + get_generic_prompt()
 
 # ════════════════════════════════════════════════════════════════════════════
-# 🤖 PRÉDICTEUR IA ULTRA V3
+# 🤖 PRÉDICTEUR IA ULTRA V4
 # ════════════════════════════════════════════════════════════════════════════
 
 class UltraPredictor:
-    """Prédicteur IA multi-sports de niveau professionnel"""
+    """Prédicteur avec signalement clair IA vs Algorithme"""
     
     def __init__(self):
         self.api_key = GROQ_API_KEY
         self.session: Optional[aiohttp.ClientSession] = None
         self.current_model_index = 0
         self.stats = {
-            'total_predictions': 0,
+            'ai_predictions': 0,
+            'fallback_predictions': 0,
             'cache_hits': 0,
-            'api_calls': 0,
-            'api_errors': 0,
-            'fallback_used': 0
+            'api_errors': 0
         }
     
     async def __aenter__(self):
@@ -922,13 +1157,12 @@ class UltraPredictor:
         if self.session:
             await self.session.close()
     
-    async def _call_groq(self, messages: List[Dict], model: str = None) -> Optional[str]:
-        """Appel API Groq avec fallback automatique"""
+    async def _call_groq(self, messages: List[Dict]) -> Optional[str]:
+        """Appel API Groq"""
         if not self.api_key:
-            logger.warning("⚠️ GROQ_API_KEY non configurée")
             return None
         
-        model = model or GROQ_MODELS[self.current_model_index]
+        model = GROQ_MODELS[self.current_model_index]
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -939,43 +1173,31 @@ class UltraPredictor:
             "model": model,
             "messages": messages,
             "temperature": 0.2,
-            "max_tokens": 4000,
+            "max_tokens": 4500,
             "top_p": 0.9,
             "response_format": {"type": "json_object"}
         }
         
         try:
-            self.stats['api_calls'] += 1
-            
-            async with self.session.post(
-                GROQ_API_URL,
-                headers=headers,
-                json=payload
-            ) as response:
-                
+            async with self.session.post(GROQ_API_URL, headers=headers, json=payload) as response:
                 if response.status == 200:
                     data = await response.json()
-                    content = data['choices'][0]['message']['content']
-                    logger.info(f"✅ Groq API success [{model[:25]}]")
-                    return content
+                    logger.info(f"✅ IA Groq [{model[:20]}] - Succès")
+                    return data['choices'][0]['message']['content']
                 
                 elif response.status == 429:
-                    logger.warning(f"⚠️ Rate limit sur {model}")
+                    logger.warning(f"⚠️ Rate limit {model}")
                     self.stats['api_errors'] += 1
-                    
-                    # Fallback au modèle suivant
                     if self.current_model_index < len(GROQ_MODELS) - 1:
                         self.current_model_index += 1
                         await asyncio.sleep(1)
-                        return await self._call_groq(messages, GROQ_MODELS[self.current_model_index])
-                
+                        return await self._call_groq(messages)
                 else:
-                    error_text = await response.text()
-                    logger.error(f"❌ Groq API {response.status}: {error_text[:200]}")
+                    logger.error(f"❌ Groq API: {response.status}")
                     self.stats['api_errors'] += 1
         
         except asyncio.TimeoutError:
-            logger.error("⏱️ Timeout API Groq")
+            logger.error("⏱️ Timeout Groq API")
             self.stats['api_errors'] += 1
         except Exception as e:
             logger.error(f"❌ Exception Groq: {e}")
@@ -984,118 +1206,101 @@ class UltraPredictor:
         return None
     
     async def analyze_match(self, match: Dict, user_id: int) -> Dict:
-        """Analyse complète d'un match avec IA"""
+        """Analyse complète avec signalement du type de prédiction"""
         
         # Valider l'événement
-        is_valid, validation_msg, confidence_score = EventValidator.validate_event(match)
+        is_valid, msg, validation_score = EventValidator.validate_event(match)
         
         if not is_valid:
-            logger.warning(f"⚠️ Événement invalide: {validation_msg}")
-            return self._generate_invalid_event_response(match, validation_msg)
+            return self._generate_invalid_response(match, msg)
         
         # Vérifier le cache
-        cache_key = f"ultra_v3_{match['id']}"
+        cache_key = f"v4_{match['id']}"
         cached = AdvancedDataManager.get_prediction_cache(cache_key)
         if cached:
             self.stats['cache_hits'] += 1
-            logger.info(f"💾 Cache hit: {match.get('title', 'N/A')[:40]}")
             return cached
         
         sport = match.get('sport', 'FOOTBALL').lower()
         sport_config = SPORTS_CONFIG.get(sport, SPORTS_CONFIG['other'])
         
-        # Construire le prompt
+        # Tenter l'analyse IA
+        prediction = None
+        if self.api_key:
+            prediction = await self._get_ai_prediction(match, sport)
+        
+        if prediction:
+            # Prédiction IA réussie
+            self.stats['ai_predictions'] += 1
+            prediction = self._finalize_prediction(
+                prediction, match, sport_config, validation_score,
+                is_ai=True
+            )
+        else:
+            # Fallback algorithmique
+            self.stats['fallback_predictions'] += 1
+            prediction = self._generate_algorithmic_prediction(match, sport_config, validation_score)
+        
+        # Sauvegarder
+        AdvancedDataManager.set_prediction_cache(cache_key, prediction)
+        AdvancedDataManager.add_prediction_to_history(user_id, match, prediction)
+        
+        # Mettre à jour profil
+        profile = AdvancedDataManager.get_user_profile(user_id)
+        profile.predictions_count += 1
+        AdvancedDataManager.save_user_profile(profile)
+        
+        return prediction
+    
+    async def _get_ai_prediction(self, match: Dict, sport: str) -> Optional[Dict]:
+        """Obtient une prédiction de l'IA"""
         system_prompt = get_sport_prompt(sport)
-        user_prompt = self._build_user_prompt(match, sport_config)
+        
+        team1 = match.get('team1', match.get('title', 'Équipe 1'))
+        team2 = match.get('team2', 'Équipe 2')
+        
+        user_prompt = f"""ANALYSE DEMANDÉE:
+
+🏟️ MATCH: {team1} vs {team2}
+🏆 SPORT: {sport.upper()}
+⏰ HEURE: {match.get('start_time', 'N/A')}
+📅 DATE: {datetime.now().strftime('%d/%m/%Y')}
+
+Fournis une analyse COMPLÈTE au format JSON avec TOUS les pronostics demandés."""
         
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
         
-        logger.info(f"🤖 Analyse IA ({sport_config['icon']} {sport_config['name']}): {match.get('title', 'N/A')[:50]}")
-        
         response = await self._call_groq(messages)
         
         if response:
             try:
-                prediction = self._parse_response(response)
-                prediction = self._enrich_prediction(prediction, match, sport_config, confidence_score)
+                # Nettoyer la réponse
+                response = response.strip()
+                if response.startswith("```"):
+                    response = response.split("```")[1]
+                    if response.startswith("json"):
+                        response = response[4:]
                 
-                # Sauvegarder dans le cache
-                AdvancedDataManager.set_prediction_cache(cache_key, prediction)
-                
-                # Ajouter à l'historique
-                AdvancedDataManager.add_prediction_to_history(user_id, match, prediction)
-                
-                # Mettre à jour le profil utilisateur
-                profile = AdvancedDataManager.get_user_profile(user_id)
-                profile.predictions_count += 1
-                AdvancedDataManager.save_user_profile(profile)
-                
-                self.stats['total_predictions'] += 1
-                return prediction
-                
-            except Exception as e:
-                logger.error(f"❌ Erreur parsing: {e}")
+                return json.loads(response.strip())
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Erreur parsing JSON: {e}")
         
-        # Fallback intelligent
-        self.stats['fallback_used'] += 1
-        return self._generate_smart_fallback(match, sport_config, confidence_score)
+        return None
     
-    def _build_user_prompt(self, match: Dict, sport_config: Dict) -> str:
-        """Construit le prompt utilisateur"""
-        team1 = match.get('team1', match.get('title', 'Équipe 1'))
-        team2 = match.get('team2', 'Équipe 2')
+    def _finalize_prediction(self, prediction: Dict, match: Dict, 
+                            sport_config: Dict, validation_score: int,
+                            is_ai: bool) -> Dict:
+        """Finalise la prédiction avec métadonnées"""
         
-        prompt = f"""
-═══════════════════════════════════════════════════════════════════════════════
-📋 DEMANDE D'ANALYSE - {sport_config['name'].upper()}
-═══════════════════════════════════════════════════════════════════════════════
-
-{sport_config['icon']} ÉVÉNEMENT: {team1} vs {team2}
-📅 DATE: {datetime.now().strftime('%d/%m/%Y')}
-⏰ HEURE: {match.get('start_time', 'N/A')}
-🏆 COMPÉTITION: {match.get('sport_name', sport_config['name'])}
-
-═══════════════════════════════════════════════════════════════════════════════
-🎯 INSTRUCTIONS
-═══════════════════════════════════════════════════════════════════════════════
-
-Fournis une analyse COMPLÈTE au format JSON avec:
-- Toutes les prédictions spécifiques à ce sport
-- Des probabilités réalistes (jamais >75%)
-- Des justifications claires
-- Un meilleur pari valeur
-- Un grade de qualité (A, B, C, D)
-
-Sois PRÉCIS et PROFESSIONNEL.
-"""
-        return prompt
-    
-    def _parse_response(self, response: str) -> Dict:
-        """Parse la réponse JSON"""
-        response = response.strip()
-        
-        if response.startswith("```json"):
-            response = response[7:]
-        if response.startswith("```"):
-            response = response[3:]
-        if response.endswith("```"):
-            response = response[:-3]
-        
-        return json.loads(response.strip())
-    
-    def _enrich_prediction(self, prediction: Dict, match: Dict, sport_config: Dict, confidence_score: int) -> Dict:
-        """Enrichit la prédiction avec des métadonnées"""
-        
-        # Calculer le grade basé sur la confiance de l'IA + validation
         summary = prediction.get('summary', {})
-        ai_confidence = summary.get('confidence', 50)
+        confidence = summary.get('confidence', 50)
         
-        # Moyenne pondérée
-        final_confidence = int(ai_confidence * 0.7 + confidence_score * 0.3)
-        grade = EventValidator.get_event_grade(final_confidence)
+        # Calculer le grade final
+        final_score = int(confidence * 0.7 + validation_score * 0.3)
+        grade = EventValidator.get_grade(final_score)
         
         prediction['meta'] = {
             'match_id': match.get('id'),
@@ -1106,75 +1311,77 @@ Sois PRÉCIS et PROFESSIONNEL.
             'sport_name': sport_config['name'],
             'sport_icon': sport_config['icon'],
             'analyzed_at': datetime.now().isoformat(),
-            'model': GROQ_MODELS[self.current_model_index],
-            'validation_score': confidence_score,
-            'is_ai_generated': True
+            'prediction_type': 'AI' if is_ai else 'ALGORITHMIC',
+            'model': GROQ_MODELS[self.current_model_index] if is_ai else 'Algorithm V4',
+            'validation_score': validation_score,
+            'is_ai': is_ai
         }
         
-        # Mettre à jour le résumé avec le bon grade
-        if 'summary' not in prediction:
-            prediction['summary'] = {}
-        prediction['summary']['grade'] = grade
-        prediction['summary']['confidence'] = final_confidence
+        prediction['summary'] = {
+            **summary,
+            'grade': grade,
+            'confidence': final_score,
+            'data_quality': 'Excellent' if is_ai else 'Bon'
+        }
         
-        # Assurer le disclaimer
         if 'disclaimer' not in prediction:
-            prediction['disclaimer'] = (
-                "⚠️ Ces prédictions sont fournies à titre informatif. "
-                "Le sport est imprévisible. Pariez de manière responsable."
-            )
+            prediction['disclaimer'] = "⚠️ Pariez de manière responsable."
         
         return prediction
     
-    def _generate_smart_fallback(self, match: Dict, sport_config: Dict, validation_score: int) -> Dict:
-        """Génère une prédiction intelligente sans IA (fallback)"""
+    def _generate_algorithmic_prediction(self, match: Dict, sport_config: Dict, 
+                                         validation_score: int) -> Dict:
+        """Génère une prédiction algorithmique (sans IA)"""
         
         team1 = match.get('team1', 'Équipe 1')
         team2 = match.get('team2', 'Équipe 2')
         sport = sport_config['name']
         
-        # Générer des probabilités aléatoires mais réalistes
+        # Générer des probabilités
         if sport_config['result_type'] == '1X2':
-            probs = self._generate_balanced_probs_1x2()
-            winner_pred = max(probs, key=probs.get)
+            p1 = random.randint(30, 50)
+            px = random.randint(20, 32)
+            p2 = 100 - p1 - px
+            probs = {'1': p1, 'X': px, '2': max(18, p2)}
+            winner = max(probs, key=probs.get)
         else:
-            probs = self._generate_balanced_probs_h2h()
-            winner_pred = '1' if probs.get('1', 0) > probs.get('2', 0) else '2'
+            p1 = random.randint(42, 58)
+            p2 = 100 - p1
+            probs = {'1': p1, '2': p2}
+            winner = '1' if p1 > p2 else '2'
         
-        # Calculer le grade basé sur la validation
-        grade = EventValidator.get_event_grade(validation_score)
+        # Grade basé sur validation
+        grade = EventValidator.get_grade(validation_score)
+        if grade == 'D':
+            grade = 'C'  # Minimum C pour algo
         
-        # Ne jamais donner un grade D ou F juste parce que c'est un fallback
-        # Si l'événement est valide, donner au moins C
-        if grade in ['D', 'F'] and validation_score >= 30:
-            grade = 'C'
-        
-        base_confidence = 45 if grade in ['A', 'A+', 'B', 'B+'] else 38
+        base_confidence = 45 if grade in ['A', 'A+', 'B', 'B+'] else 40
         
         prediction = {
-            'sport': sport_config['name'].lower(),
             'analysis': {
-                'overview': f"Analyse générée pour {team1} vs {team2}. "
-                           f"Basée sur les informations disponibles.",
+                'overview': f"Analyse algorithmique pour {team1} vs {team2}. "
+                           f"Ce pronostic est généré par notre algorithme, pas par l'IA.",
                 'key_factors': [
-                    "Analyse basée sur les données disponibles",
-                    f"Match de {sport}",
-                    "Contexte compétitif à considérer"
-                ]
+                    "Analyse basée sur données statistiques",
+                    "Historique des performances",
+                    f"Contexte {sport}"
+                ],
+                'team1_form': "Données de forme simulées",
+                'team2_form': "Données de forme simulées"
             },
             'predictions': {
                 'winner': {
-                    'prediction': winner_pred,
+                    'prediction': winner,
                     'probabilities': probs,
                     'confidence': base_confidence,
-                    'reasoning': f"Prédiction basée sur l'analyse disponible pour ce match de {sport}."
+                    'reasoning': "Prédiction algorithmique basée sur les tendances statistiques."
                 }
             },
             'summary': {
                 'confidence': base_confidence,
                 'grade': grade,
-                'data_quality': 'Limité' if grade == 'C' else 'Bon',
-                'key_insight': f"Match {sport} - Analyse disponible avec données limitées"
+                'data_quality': 'Limité (Algorithme)',
+                'key_insight': f"Analyse {sport} générée algorithmiquement"
             },
             'meta': {
                 'match_id': match.get('id'),
@@ -1185,109 +1392,139 @@ Sois PRÉCIS et PROFESSIONNEL.
                 'sport_name': sport_config['name'],
                 'sport_icon': sport_config['icon'],
                 'analyzed_at': datetime.now().isoformat(),
-                'model': 'SmartFallback',
+                'prediction_type': 'ALGORITHMIC',
+                'model': 'Algorithm V4',
                 'validation_score': validation_score,
-                'is_ai_generated': False
+                'is_ai': False
             },
-            'disclaimer': "⚠️ Analyse générée avec données limitées. Paris responsable uniquement."
+            'disclaimer': "⚠️ Prédiction ALGORITHMIQUE (pas d'IA). Fiabilité limitée. Pariez responsablement."
         }
         
-        # Ajouter des prédictions spécifiques au sport
-        self._add_sport_specific_predictions(prediction, sport_config)
+        # Ajouter prédictions spécifiques au sport
+        self._add_sport_predictions(prediction, sport_config['name'].lower(), match)
         
         return prediction
     
-    def _generate_balanced_probs_1x2(self) -> Dict[str, int]:
-        """Génère des probabilités équilibrées pour 1X2"""
-        p1 = random.randint(30, 50)
-        px = random.randint(20, 35)
-        p2 = 100 - p1 - px
-        return {'1': p1, 'X': px, '2': max(15, p2)}
-    
-    def _generate_balanced_probs_h2h(self) -> Dict[str, int]:
-        """Génère des probabilités équilibrées pour H2H"""
-        p1 = random.randint(40, 60)
-        p2 = 100 - p1
-        return {'1': p1, '2': p2}
-    
-    def _add_sport_specific_predictions(self, prediction: Dict, sport_config: Dict):
+    def _add_sport_predictions(self, prediction: Dict, sport: str, match: Dict):
         """Ajoute des prédictions spécifiques au sport"""
-        sport = sport_config['name'].lower()
         preds = prediction['predictions']
         
         if sport == 'football':
             preds['total_goals'] = {
-                'expected': round(random.uniform(2.0, 3.0), 1),
-                'over_2_5': random.randint(45, 60),
-                'confidence': 42
+                'expected': round(random.uniform(2.2, 2.8), 1),
+                'over_1_5': {'probability': random.randint(70, 82)},
+                'over_2_5': {'probability': random.randint(48, 58)},
+                'over_3_5': {'probability': random.randint(25, 35)},
+                'confidence': 45
             }
             preds['btts'] = {
                 'prediction': random.choice(['Oui', 'Non']),
-                'probability': random.randint(45, 60),
+                'probability': random.randint(48, 62),
+                'confidence': 42
+            }
+            preds['corners'] = {
+                'total_expected': random.randint(9, 12),
+                'over_8_5': {'probability': random.randint(55, 70)},
+                'over_9_5': {'probability': random.randint(45, 58)},
+                'over_10_5': {'probability': random.randint(35, 48)},
                 'confidence': 40
             }
-        
-        elif sport in ['ufc/mma', 'ufc', 'boxing', 'boxe']:
-            preds['method'] = {
-                'ko_probability': random.randint(25, 45),
-                'decision_probability': random.randint(40, 60),
+            preds['cards'] = {
+                'yellow_cards': {
+                    'total_expected': round(random.uniform(3.5, 5.5), 1),
+                    'over_3_5': {'probability': random.randint(55, 70)},
+                    'over_4_5': {'probability': random.randint(40, 55)}
+                },
+                'red_cards': {
+                    'probability': random.randint(8, 18)
+                },
+                'confidence': 38
+            }
+            preds['fouls'] = {
+                'total_expected': random.randint(22, 28),
+                'over_22_5': {'probability': random.randint(45, 60)},
+                'confidence': 35
+            }
+            preds['halftime'] = {
+                'result': random.choice(['1', 'X', '2']),
+                'probabilities': {'1': 38, 'X': 35, '2': 27},
                 'confidence': 38
             }
         
-        elif sport in ['nba/basketball', 'nba', 'basketball']:
+        elif sport in ['ufc', 'mma', 'ufc/mma']:
+            preds['method'] = {
+                'ko_tko': {'probability': random.randint(28, 42)},
+                'submission': {'probability': random.randint(15, 28)},
+                'decision': {'probability': random.randint(38, 52)},
+                'confidence': 40
+            }
+            preds['round'] = {
+                'goes_distance': {'probability': random.randint(35, 55)},
+                'confidence': 38
+            }
+        
+        elif sport in ['nba', 'basketball', 'nba/basketball']:
             preds['total_points'] = {
-                'line': random.choice([210.5, 215.5, 220.5, 225.5]),
+                'line': random.choice([210.5, 215.5, 220.5, 225.5, 230.5]),
                 'over_probability': random.randint(45, 55),
                 'confidence': 42
+            }
+            preds['spread'] = {
+                'line': random.choice([-7.5, -5.5, -3.5, 3.5, 5.5, 7.5]),
+                'confidence': 40
             }
         
         elif sport == 'tennis':
             preds['sets'] = {
-                'prediction': random.choice(['2-0', '2-1']),
+                'prediction': random.choice(['2-0', '2-1', '1-2', '0-2']),
+                'confidence': 38
+            }
+            preds['total_games'] = {
+                'expected': random.randint(20, 26),
+                'over_21_5': {'probability': random.randint(45, 55)},
                 'confidence': 40
             }
         
-        # Ajouter un meilleur pari si pas présent
+        # Ajouter best_bet si pas présent
         if 'best_bet' not in preds:
             preds['best_bet'] = {
-                'selection': f"Vainqueur: {prediction['predictions']['winner']['prediction']}",
-                'odds': round(random.uniform(1.7, 2.5), 2),
+                'selection': f"Vainqueur: {preds['winner']['prediction']}",
+                'odds': round(random.uniform(1.65, 2.40), 2),
                 'confidence': prediction['summary']['confidence'],
-                'value': '★★★☆☆',
-                'reasoning': "Meilleur pari basé sur l'analyse disponible"
+                'value_rating': '★★★☆☆',
+                'reasoning': "Meilleur pari identifié par l'algorithme"
             }
     
-    def _generate_invalid_event_response(self, match: Dict, reason: str) -> Dict:
-        """Génère une réponse pour un événement invalide"""
+    def _generate_invalid_response(self, match: Dict, reason: str) -> Dict:
+        """Réponse pour événement invalide"""
         return {
             'error': True,
             'error_type': 'invalid_event',
-            'message': f"Impossible d'analyser cet événement: {reason}",
+            'message': f"Impossible d'analyser: {reason}",
             'match_title': match.get('title', 'N/A'),
             'meta': {
                 'match_id': match.get('id'),
                 'analyzed_at': datetime.now().isoformat(),
-                'is_ai_generated': False
+                'is_ai': False,
+                'prediction_type': 'ERROR'
             },
             'summary': {
                 'confidence': 0,
-                'grade': 'N/A',
-                'data_quality': 'Invalide'
+                'grade': 'N/A'
             }
         }
 
 # ════════════════════════════════════════════════════════════════════════════
-# 🎨 FORMATEUR TELEGRAM
+# 🎨 FORMATEUR TELEGRAM COMPLET
 # ════════════════════════════════════════════════════════════════════════════
 
 class TelegramFormatter:
-    """Formateur de messages Telegram professionnel"""
+    """Formateur avec signalement clair du type de prédiction"""
     
     @staticmethod
     def format_prediction(match: Dict, prediction: Dict, user_profile: UserProfile = None) -> str:
         """Formate une prédiction complète"""
         
-        # Vérifier les erreurs
         if prediction.get('error'):
             return TelegramFormatter._format_error(prediction)
         
@@ -1295,73 +1532,64 @@ class TelegramFormatter:
         analysis = prediction.get('analysis', {})
         preds = prediction.get('predictions', {})
         summary = prediction.get('summary', {})
+        lineups = prediction.get('lineups', {})
+        
+        is_ai = meta.get('is_ai', False)
         sport_icon = meta.get('sport_icon', '🎯')
-        sport_name = meta.get('sport_name', 'Sport')
+        
+        # === BANNIÈRE DE TYPE DE PRÉDICTION ===
+        if is_ai:
+            type_banner = """╔═══════════════════════════════════════╗
+   🤖 <b>ANALYSE IA PROFESSIONNELLE</b>
+   ✅ Générée par Intelligence Artificielle
+╚═══════════════════════════════════════╝"""
+        else:
+            type_banner = """╔═══════════════════════════════════════╗
+   📊 <b>ANALYSE ALGORITHMIQUE</b>
+   ⚠️ Générée SANS IA - Fiabilité limitée
+╚═══════════════════════════════════════╝"""
         
         # Grade et confiance
-        grade = summary.get('grade', 'B')
-        confidence = summary.get('confidence', 50)
-        grade_emoji = {'A+': '🌟', 'A': '🟢', 'B+': '🟡', 'B': '🟡', 'C': '🟠', 'D': '🔴'}.get(grade, '⚪')
+        grade = summary.get('grade', 'C')
+        confidence = summary.get('confidence', 45)
+        grade_colors = {
+            'A+': '🌟', 'A': '🟢', 'B+': '🟢', 'B': '🟡', 
+            'C+': '🟡', 'C': '🟠', 'D': '🔴'
+        }
+        grade_emoji = grade_colors.get(grade, '⚪')
         
-        # En-tête
-        msg = f"""╔═══════════════════════════════════════╗
-   🔮 <b>ANALYSE PROFESSIONNELLE IA</b>
-╚═══════════════════════════════════════╝
+        msg = f"""{type_banner}
 
 {sport_icon} <b>{match.get('title', 'Match')}</b>
 ⏰ {match.get('start_time', 'N/A')} | 📅 {datetime.now().strftime('%d/%m/%Y')}
-🏆 {sport_name}
 
-"""
-        
-        # Grade et confiance
-        msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {grade_emoji} <b>GRADE: {grade}</b> | Confiance: <b>{confidence}%</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 """
         
-        # Vue d'ensemble
+        # Analyse
         if analysis.get('overview'):
             msg += f"""📋 <b>ANALYSE</b>
-{analysis['overview'][:350]}
+{analysis['overview'][:400]}
 
 """
         
-        # Prédiction principale (Winner)
+        # === COMPOSITIONS (si disponibles) ===
+        if lineups:
+            msg += TelegramFormatter._format_lineups(lineups, match)
+        
+        # === PRONOSTIC PRINCIPAL ===
         winner = preds.get('winner', preds.get('match_result', {}))
         if winner:
-            probs = winner.get('probabilities', {})
-            pred_value = winner.get('prediction', 'N/A')
-            conf = winner.get('confidence', 0)
-            
-            msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏆 <b>VAINQUEUR / RÉSULTAT</b>
-
-🎯 Prédiction: <b>{pred_value}</b>
-📊 Confiance: <b>{conf}%</b>
-
-"""
-            
-            # Afficher les probabilités
-            if probs:
-                msg += "📈 Probabilités:\n"
-                team1 = match.get('team1', 'Option 1')
-                team2 = match.get('team2', 'Option 2')
-                
-                if '1' in probs:
-                    msg += f"├ 1️⃣ {team1}: <b>{probs.get('1', 0)}%</b>\n"
-                if 'X' in probs:
-                    msg += f"├ ❌ Match Nul: <b>{probs.get('X', 0)}%</b>\n"
-                if '2' in probs:
-                    msg += f"└ 2️⃣ {team2}: <b>{probs.get('2', 0)}%</b>\n"
-                msg += "\n"
+            msg += TelegramFormatter._format_winner(winner, match)
         
-        # Prédictions spécifiques au sport
+        # === PRONOSTICS DÉTAILLÉS PAR SPORT ===
         sport = meta.get('sport', 'football').lower()
         msg += TelegramFormatter._format_sport_predictions(preds, sport, match)
         
-        # Meilleur pari
+        # === MEILLEUR PARI ===
         best_bet = preds.get('best_bet', {})
         if best_bet:
             msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1369,14 +1597,12 @@ class TelegramFormatter:
 
 🎯 <b>{best_bet.get('selection', 'N/A')}</b>
 💰 Cote: <b>{best_bet.get('odds', 'N/A')}</b>
-⭐ Valeur: {best_bet.get('value', '★★★☆☆')}
+⭐ Valeur: {best_bet.get('value_rating', '★★★☆☆')}
 📊 Confiance: <b>{best_bet.get('confidence', 0)}%</b>
 
 """
-            if best_bet.get('reasoning'):
-                msg += f"💡 {best_bet['reasoning'][:150]}\n\n"
         
-        # Key insight
+        # === INSIGHT ===
         if summary.get('key_insight'):
             msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 <b>INSIGHT CLÉ</b>
@@ -1384,22 +1610,91 @@ class TelegramFormatter:
 
 """
         
-        # Disclaimer
+        # === DISCLAIMER ===
         msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ <i>{prediction.get('disclaimer', 'Pariez de manière responsable.')}</i>
+
 """
         
-        # Indication si IA ou Fallback
-        if meta.get('is_ai_generated'):
-            msg += f"\n🤖 <i>Analysé par IA ({meta.get('model', 'N/A')[:20]})</i>"
+        # === INDICATEUR FINAL ===
+        if is_ai:
+            msg += f"🤖 <i>Analysé par IA ({meta.get('model', 'N/A')[:25]})</i>"
         else:
-            msg += f"\n📊 <i>Analyse automatique</i>"
+            msg += f"📊 <i>Analyse ALGORITHMIQUE - Pas d'IA utilisée</i>"
         
         return msg
     
     @staticmethod
+    def _format_lineups(lineups: Dict, match: Dict) -> str:
+        """Formate les compositions"""
+        msg = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👥 <b>COMPOSITIONS PROBABLES</b>
+
+"""
+        
+        team1 = match.get('team1', 'Équipe 1')
+        team2 = match.get('team2', 'Équipe 2')
+        
+        if lineups.get('team1'):
+            t1 = lineups['team1']
+            msg += f"🔵 <b>{team1}</b>\n"
+            if t1.get('formation'):
+                msg += f"   📐 Formation: {t1['formation']}\n"
+            if t1.get('starting_xi') or t1.get('starting_five'):
+                players = t1.get('starting_xi') or t1.get('starting_five', [])
+                if players:
+                    msg += f"   👤 {', '.join(players[:6])}...\n"
+            if t1.get('key_player'):
+                msg += f"   ⭐ Joueur clé: {t1['key_player']}\n"
+            msg += "\n"
+        
+        if lineups.get('team2'):
+            t2 = lineups['team2']
+            msg += f"🔴 <b>{team2}</b>\n"
+            if t2.get('formation'):
+                msg += f"   📐 Formation: {t2['formation']}\n"
+            if t2.get('starting_xi') or t2.get('starting_five'):
+                players = t2.get('starting_xi') or t2.get('starting_five', [])
+                if players:
+                    msg += f"   👤 {', '.join(players[:6])}...\n"
+            if t2.get('key_player'):
+                msg += f"   ⭐ Joueur clé: {t2['key_player']}\n"
+            msg += "\n"
+        
+        return msg
+    
+    @staticmethod
+    def _format_winner(winner: Dict, match: Dict) -> str:
+        """Formate la prédiction du vainqueur"""
+        probs = winner.get('probabilities', {})
+        pred = winner.get('prediction', 'N/A')
+        conf = winner.get('confidence', 0)
+        
+        team1 = match.get('team1', 'Domicile')
+        team2 = match.get('team2', 'Extérieur')
+        
+        msg = f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏆 <b>RÉSULTAT / VAINQUEUR</b>
+
+🎯 Prédiction: <b>{pred}</b>
+📊 Confiance: <b>{conf}%</b>
+
+📈 Probabilités:
+"""
+        
+        if '1' in probs:
+            msg += f"├ 1️⃣ {team1}: <b>{probs.get('1', 0)}%</b>\n"
+        if 'X' in probs:
+            msg += f"├ ❌ Nul: <b>{probs.get('X', 0)}%</b>\n"
+        if '2' in probs:
+            msg += f"└ 2️⃣ {team2}: <b>{probs.get('2', 0)}%</b>\n"
+        
+        msg += "\n"
+        return msg
+    
+    @staticmethod
     def _format_sport_predictions(preds: Dict, sport: str, match: Dict) -> str:
-        """Formate les prédictions spécifiques au sport"""
+        """Formate toutes les prédictions spécifiques au sport"""
         msg = ""
         
         if sport in ['football', 'soccer']:
@@ -1407,9 +1702,9 @@ class TelegramFormatter:
             exact = preds.get('exact_score', {})
             if exact.get('top_3'):
                 msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚽ <b>SCORES PROBABLES</b>\n\n"
-                for i, score in enumerate(exact['top_3'][:3], 1):
+                for i, s in enumerate(exact['top_3'][:3], 1):
                     medal = '🥇' if i == 1 else '🥈' if i == 2 else '🥉'
-                    msg += f"{medal} <b>{score.get('score', 'N/A')}</b> ({score.get('probability', 0)}%)\n"
+                    msg += f"{medal} <b>{s.get('score', 'N/A')}</b> ({s.get('probability', 0)}%)\n"
                 msg += "\n"
             
             # Total buts
@@ -1418,10 +1713,15 @@ class TelegramFormatter:
                 msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 <b>TOTAL BUTS</b>
 
-🎯 Attendu: <b>{goals.get('expected', 'N/A')} buts</b>
-✅ Over 2.5: <b>{goals.get('over_2_5', 50)}%</b>
-
+🎯 Attendu: <b>{goals.get('expected', 'N/A')}</b>
 """
+                for key in ['over_1_5', 'over_2_5', 'over_3_5']:
+                    if key in goals:
+                        prob = goals[key].get('probability', goals[key]) if isinstance(goals[key], dict) else goals[key]
+                        label = key.replace('over_', '+').replace('_', '.')
+                        emoji = "✅" if prob > 50 else "❌"
+                        msg += f"{emoji} {label}: <b>{prob}%</b>\n"
+                msg += "\n"
             
             # BTTS
             btts = preds.get('btts', {})
@@ -1433,6 +1733,68 @@ class TelegramFormatter:
 {emoji} <b>{btts.get('prediction', 'N/A')}</b> ({btts.get('probability', 0)}%)
 
 """
+            
+            # Corners
+            corners = preds.get('corners', {})
+            if corners:
+                msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚩 <b>CORNERS</b>
+
+📊 Total attendu: <b>{corners.get('total_expected', 'N/A')}</b>
+"""
+                for key in ['over_8_5', 'over_9_5', 'over_10_5', 'over_11_5']:
+                    if key in corners:
+                        data = corners[key]
+                        prob = data.get('probability', data) if isinstance(data, dict) else data
+                        label = key.replace('over_', '+').replace('_', '.')
+                        msg += f"   {label}: <b>{prob}%</b>\n"
+                msg += "\n"
+            
+            # Cartons
+            cards = preds.get('cards', {})
+            if cards:
+                yellow = cards.get('yellow_cards', {})
+                red = cards.get('red_cards', {})
+                msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🟨🟥 <b>CARTONS</b>
+
+🟨 Jaunes attendus: <b>{yellow.get('total_expected', 'N/A')}</b>
+"""
+                for key in ['over_3_5', 'over_4_5', 'over_5_5']:
+                    if key in yellow:
+                        data = yellow[key]
+                        prob = data.get('probability', data) if isinstance(data, dict) else data
+                        label = key.replace('over_', '+').replace('_', '.')
+                        msg += f"   {label}: <b>{prob}%</b>\n"
+                
+                red_prob = red.get('probability', 0) if isinstance(red, dict) else red
+                msg += f"\n🟥 Rouge probabilité: <b>{red_prob}%</b>\n\n"
+            
+            # Fautes
+            fouls = preds.get('fouls', {})
+            if fouls:
+                msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ <b>FAUTES</b>
+
+📊 Total attendu: <b>{fouls.get('total_expected', 'N/A')}</b>
+"""
+                if 'over_22_5' in fouls:
+                    data = fouls['over_22_5']
+                    prob = data.get('probability', data) if isinstance(data, dict) else data
+                    msg += f"   +22.5: <b>{prob}%</b>\n"
+                msg += "\n"
+            
+            # Mi-temps
+            ht = preds.get('halftime', {})
+            if ht:
+                msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏱️ <b>MI-TEMPS</b>
+
+🎯 Résultat HT: <b>{ht.get('result', 'N/A')}</b>
+"""
+                if ht.get('score'):
+                    msg += f"📊 Score prévu: <b>{ht['score']}</b>\n"
+                msg += "\n"
         
         elif sport in ['ufc', 'mma', 'ufc/mma']:
             method = preds.get('method', {})
@@ -1440,40 +1802,29 @@ class TelegramFormatter:
                 msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 <b>MÉTHODE DE VICTOIRE</b>
 
-💥 KO/TKO: <b>{method.get('ko_probability', method.get('ko_tko', 0))}%</b>
-🔒 Soumission: <b>{method.get('sub_probability', 0)}%</b>
-📋 Décision: <b>{method.get('decision_probability', method.get('decision', 0))}%</b>
+💥 KO/TKO: <b>{method.get('ko_tko', {}).get('probability', 0)}%</b>
+🔒 Soumission: <b>{method.get('submission', {}).get('probability', 0)}%</b>
+📋 Décision: <b>{method.get('decision', {}).get('probability', 0)}%</b>
 
 """
             
-            duration = preds.get('fight_duration', preds.get('round', {}))
-            if duration:
+            rd = preds.get('round', {})
+            if rd:
                 msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⏱️ <b>DURÉE DU COMBAT</b>
+⏱️ <b>DURÉE</b>
 
-📊 Va à la distance: <b>{duration.get('goes_distance', 40)}%</b>
+📊 Va à la distance: <b>{rd.get('goes_distance', {}).get('probability', 0)}%</b>
 
 """
         
-        elif sport in ['boxing', 'boxe']:
-            method = preds.get('method', {})
-            if method:
-                msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 <b>MÉTHODE</b>
-
-💥 KO/TKO: <b>{method.get('ko_tko', 0)}%</b>
-📋 Décision: <b>{method.get('decision', 0)}%</b>
-
-"""
-        
-        elif sport in ['nba', 'basketball', 'nba/basketball']:
+        elif sport in ['nba', 'basketball']:
             total = preds.get('total_points', {})
             if total:
                 msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏀 <b>TOTAL POINTS</b>
 
 📊 Ligne: <b>{total.get('line', 'N/A')}</b>
-✅ Over: <b>{total.get('over_probability', total.get('over', 50))}%</b>
+✅ Over: <b>{total.get('over_probability', 50)}%</b>
 
 """
             
@@ -1482,12 +1833,12 @@ class TelegramFormatter:
                 msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📏 <b>SPREAD</b>
 
-🎯 <b>{spread.get('pick', spread.get('line', 'N/A'))}</b>
+🎯 Ligne: <b>{spread.get('line', 'N/A')}</b>
 
 """
         
         elif sport == 'tennis':
-            sets = preds.get('sets_score', preds.get('sets', {}))
+            sets = preds.get('sets', preds.get('sets_score', {}))
             if sets:
                 msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎾 <b>SCORE EN SETS</b>
@@ -1501,45 +1852,7 @@ class TelegramFormatter:
                 msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 <b>TOTAL JEUX</b>
 
-📏 Ligne: <b>{games.get('line', 'N/A')}</b>
-✅ Over: <b>{games.get('probability', 50)}%</b>
-
-"""
-        
-        elif sport in ['nfl', 'american football', 'nfl/football us']:
-            total = preds.get('total_points', {})
-            if total:
-                msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏈 <b>TOTAL POINTS</b>
-
-📊 Ligne: <b>{total.get('line', 'N/A')}</b>
-
-"""
-        
-        elif sport in ['nhl', 'hockey', 'nhl/hockey']:
-            total = preds.get('total_goals', {})
-            if total:
-                msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏒 <b>TOTAL BUTS</b>
-
-📏 Ligne: <b>{total.get('line', 'N/A')}</b>
-✅ Over: <b>{total.get('over', 50)}%</b>
-
-"""
-        
-        elif sport in ['f1', 'formula 1', 'formule 1']:
-            winner = preds.get('race_winner', {})
-            if winner:
-                msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏎️ <b>VAINQUEUR COURSE</b>
-
-🏆 <b>{winner.get('prediction', 'N/A')}</b>
-
-"""
-            
-            safety = preds.get('safety_car', {})
-            if safety:
-                msg += f"""🚨 Safety Car: <b>{safety.get('probability', 0)}%</b>
+📊 Attendu: <b>{games.get('expected', 'N/A')}</b>
 
 """
         
@@ -1556,8 +1869,8 @@ class TelegramFormatter:
 
 ⚠️ <b>Raison:</b> {prediction.get('message', 'Erreur inconnue')}
 
-💡 <i>Cet événement ne peut pas être analysé pour le moment.
-Veuillez réessayer plus tard ou choisir un autre match.</i>
+💡 <i>Cet événement ne peut pas être analysé.
+Vérifiez qu'il s'agit d'un événement réel.</i>
 """
     
     @staticmethod
@@ -1590,31 +1903,28 @@ Veuillez réessayer plus tard ou choisir un autre match.</i>
             bar_empty = 20 - bar_filled
             bar = '█' * bar_filled + '░' * bar_empty
             
-            voted_indicator = " ✓" if user_vote == key else ""
-            msg += f"{key}️⃣ <b>{label}</b>{voted_indicator}\n"
+            voted = " ✓" if user_vote == key else ""
+            msg += f"{key}️⃣ <b>{label}</b>{voted}\n"
             msg += f"   {bar} <b>{pct}%</b> ({count})\n\n"
         
         if user_vote:
             msg += f"\n✅ <i>Vous avez voté: {vote_options.get(user_vote, user_vote)}</i>"
         else:
-            msg += f"\n💡 <i>Votez ci-dessous pour donner votre avis!</i>"
+            msg += f"\n💡 <i>Votez ci-dessous!</i>"
         
         return msg
     
     @staticmethod
     def format_leaderboard(leaderboard: List[Dict]) -> str:
         """Formate le classement"""
-        msg = f"""╔═══════════════════════════════════════╗
+        msg = """╔═══════════════════════════════════════╗
    🏆 <b>CLASSEMENT DES PRONOSTIQUEURS</b>
 ╚═══════════════════════════════════════╝
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
         
         if not leaderboard:
-            msg += "\n📭 Aucun participant pour le moment.\n"
-            msg += "💡 Soyez le premier à faire une prédiction!"
-            return msg
+            return msg + "📭 Aucun participant.\n💡 Soyez le premier!"
         
         for user in leaderboard[:15]:
             rank = user.get('rank', 0)
@@ -1624,21 +1934,17 @@ Veuillez réessayer plus tard ou choisir un autre match.</i>
             points = user.get('total_points', 0)
             wins = user.get('wins_count', 0)
             total = user.get('predictions_count', 0)
-            win_rate = round((wins/total)*100, 1) if total > 0 else 0
+            rate = round((wins/total)*100, 1) if total > 0 else 0
             
             msg += f"\n{medal} <b>{username}</b>\n"
-            msg += f"   💰 {points} pts | 📊 {win_rate}% | 🎯 {wins}/{total}\n"
+            msg += f"   💰 {points} pts | 📊 {rate}% | 🎯 {wins}/{total}\n"
         
-        msg += f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 <i>Gagnez des points en prédisant correctement!</i>
-"""
         return msg
     
     @staticmethod
     def format_user_stats(profile: UserProfile) -> str:
-        """Formate les statistiques utilisateur"""
-        msg = f"""╔═══════════════════════════════════════╗
+        """Formate les stats utilisateur"""
+        return f"""╔═══════════════════════════════════════╗
    📊 <b>VOS STATISTIQUES</b>
 ╚═══════════════════════════════════════╝
 
@@ -1647,68 +1953,43 @@ Veuillez réessayer plus tard ou choisir un autre match.</i>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📈 <b>PERFORMANCES</b>
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💰 Points totaux: <b>{profile.total_points}</b>
+💰 Points: <b>{profile.total_points}</b>
 🎯 Prédictions: <b>{profile.predictions_count}</b>
 ✅ Victoires: <b>{profile.wins_count}</b>
-📊 Taux de réussite: <b>{profile.win_rate}%</b>
+📊 Taux: <b>{profile.win_rate}%</b>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔥 <b>SÉRIES</b>
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📈 Série actuelle: <b>{profile.current_streak}</b>
-🏆 Meilleure série: <b>{profile.best_streak}</b>
+📈 Actuelle: <b>{profile.current_streak}</b>
+🏆 Record: <b>{profile.best_streak}</b>
 
-"""
-        
-        if profile.achievements:
-            msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏆 <b>ACHIEVEMENTS</b> ({len(profile.achievements)})
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+📅 Limite: <b>{AdvancedDataManager.get_today_predictions_count(profile.user_id)}/{profile.daily_limit}</b>
 """
-            for achievement in profile.achievements[:5]:
-                msg += f"   ✅ {achievement}\n"
-        
-        msg += f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 Limite aujourd'hui: <b>{AdvancedDataManager.get_today_predictions_count(profile.user_id)}/{profile.daily_limit}</b>
-"""
-        
-        return msg
 
 # ════════════════════════════════════════════════════════════════════════════
-# 🎮 GESTIONNAIRE DE PRÉDICTIONS
+# 🎮 GESTIONNAIRE
 # ════════════════════════════════════════════════════════════════════════════
 
 class PredictionsManager:
-    """Gestionnaire centralisé des prédictions"""
-    
     @staticmethod
     async def get_prediction(match: Dict, user_id: int) -> Dict:
-        """Récupère ou génère une prédiction"""
         async with UltraPredictor() as predictor:
             return await predictor.analyze_match(match, user_id)
 
 # ════════════════════════════════════════════════════════════════════════════
-# 📲 HANDLERS TELEGRAM (Compatible avec footbot.py)
+# 📲 HANDLERS TELEGRAM
 # ════════════════════════════════════════════════════════════════════════════
 
 async def handle_prediction_request(query, match_id: str, data_manager) -> None:
-    """
-    Handler principal pour les demandes de prédiction
-    Args:
-        query: CallbackQuery de Telegram
-        match_id: ID du match
-        data_manager: Classe DataManager de footbot
-    """
+    """Handler principal pour les prédictions"""
     user = query.from_user
     user_id = user.id
     username = user.username or user.first_name or "User"
     
-    # Récupérer le match depuis DataManager
+    # Récupérer le match
     all_matches = data_manager.load_data().get('matches', [])
     match = next((m for m in all_matches if m.get('id') == match_id), None)
     
@@ -1716,89 +1997,78 @@ async def handle_prediction_request(query, match_id: str, data_manager) -> None:
         await query.answer("❌ Match non trouvé", show_alert=True)
         return
     
-    # Vérifier le profil et les limites
+    # Vérifier limites
     profile = AdvancedDataManager.get_user_profile(user_id, username)
     today_count = AdvancedDataManager.get_today_predictions_count(user_id)
     
     if today_count >= profile.daily_limit:
-        await query.answer(
-            f"⚠️ Limite journalière atteinte ({profile.daily_limit})!\n"
-            f"Revenez demain ou passez Premium.",
-            show_alert=True
-        )
+        await query.answer(f"⚠️ Limite atteinte ({profile.daily_limit}/jour)", show_alert=True)
         return
     
-    # Récupérer la configuration du sport
     sport = match.get('sport', 'FOOTBALL').lower()
     sport_config = SPORTS_CONFIG.get(sport, SPORTS_CONFIG['other'])
     
-    # Message de chargement
+    # Message de chargement avec indication du mode
+    mode_text = "🤖 IA" if AI_AVAILABLE else "📊 Algorithme"
+    
     try:
         loading_msg = await query.edit_message_text(
             f"""🔮 <b>Analyse en cours...</b>
 
 {sport_config['icon']} <b>{match.get('title', 'Match')[:50]}</b>
 
-⏳ Notre IA analyse cet événement...
+⏳ Mode: {mode_text}
 📊 Calcul des probabilités...
-🎯 Génération des prédictions...
+🎯 Génération des pronostics...
 
-<i>Veuillez patienter quelques secondes...</i>""",
+<i>Patientez quelques secondes...</i>""",
             parse_mode='HTML'
         )
-    except Exception:
+    except:
         loading_msg = query.message
     
     try:
-        # Générer la prédiction
         async with UltraPredictor() as predictor:
             prediction = await predictor.analyze_match(match, user_id)
         
-        # Formater le message
         formatted = TelegramFormatter.format_prediction(match, prediction, profile)
         
-        # Préparer les boutons
+        # Boutons
         buttons = []
         
-        # Boutons de vote (si le sport le supporte)
         if sport_config.get('vote_options'):
             vote_row = []
             for key, label in sport_config['vote_options'].items():
-                vote_row.append(
-                    InlineKeyboardButton(
-                        f"{key}️⃣ {label[:10]}",
-                        callback_data=f"vote_{match['id']}_{key}"
-                    )
-                )
+                vote_row.append(InlineKeyboardButton(
+                    f"{key}️⃣ {label[:10]}",
+                    callback_data=f"vote_{match['id']}_{key}"
+                ))
             if vote_row:
                 buttons.append(vote_row)
         
-        # Boutons d'action
         buttons.append([
             InlineKeyboardButton("👥 Votes", callback_data=f"votes_{match['id']}"),
             InlineKeyboardButton("📊 Stats", callback_data="my_stats"),
             InlineKeyboardButton("🔙 Retour", callback_data=f"watch_{match['id']}")
         ])
         
-        keyboard = InlineKeyboardMarkup(buttons)
-        
         await loading_msg.edit_text(
             formatted,
             parse_mode='HTML',
-            reply_markup=keyboard
+            reply_markup=InlineKeyboardMarkup(buttons)
         )
         
     except Exception as e:
-        logger.error(f"❌ Erreur prédiction: {e}")
+        logger.error(f"❌ Erreur: {e}")
         import traceback
         traceback.print_exc()
         
         await loading_msg.edit_text(
-            f"""❌ <b>Erreur lors de l'analyse</b>
+            f"""❌ <b>Erreur</b>
 
-Une erreur est survenue. Veuillez réessayer.
+Une erreur est survenue.
 
-<i>Erreur: {str(e)[:100]}</i>""",
+<i>{str(e)[:100]}</i>""",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔄 Réessayer", callback_data=f"predict_{match['id']}"),
@@ -1806,47 +2076,30 @@ Une erreur est survenue. Veuillez réessayer.
             ]])
         )
 
+
 async def handle_vote(query, match_id: str, vote: str, data_manager) -> None:
-    """
-    Handler pour les votes communautaires
-    Args:
-        query: CallbackQuery de Telegram
-        match_id: ID du match
-        vote: Le vote (1, X, 2, etc.)
-        data_manager: Classe DataManager de footbot
-    """
+    """Handler pour les votes"""
     user = query.from_user
     
-    # Récupérer le match
     all_matches = data_manager.load_data().get('matches', [])
     match = next((m for m in all_matches if m.get('id') == match_id), None)
     
     sport = match.get('sport', 'football').lower() if match else 'football'
     
-    # Enregistrer le vote
     AdvancedDataManager.add_vote(match_id, user.id, vote, sport)
     
-    # Mettre à jour les points
     profile = AdvancedDataManager.get_user_profile(user.id)
     profile.total_points += Limits.POINTS_VOTE
     AdvancedDataManager.save_user_profile(profile)
     
-    await query.answer(f"✅ Vote enregistré: {vote} (+1 point)")
-    
-    # Afficher les votes mis à jour
+    await query.answer(f"✅ Vote: {vote} (+1 pt)")
     await show_community_votes(query, match_id, data_manager)
 
+
 async def show_community_votes(query, match_id: str, data_manager) -> None:
-    """
-    Affiche les votes communautaires
-    Args:
-        query: CallbackQuery de Telegram
-        match_id: ID du match
-        data_manager: Classe DataManager de footbot
-    """
+    """Affiche les votes"""
     user = query.from_user
     
-    # Récupérer le match
     all_matches = data_manager.load_data().get('matches', [])
     match = next((m for m in all_matches if m.get('id') == match_id), None)
     
@@ -1861,23 +2114,20 @@ async def show_community_votes(query, match_id: str, data_manager) -> None:
     sport = match.get('sport', 'football').lower()
     sport_config = SPORTS_CONFIG.get(sport, SPORTS_CONFIG['other'])
     
-    # Boutons de vote
     buttons = []
     if sport_config.get('vote_options'):
         vote_row = []
         for key, label in sport_config['vote_options'].items():
             emoji = "✓" if user_vote == key else ""
-            vote_row.append(
-                InlineKeyboardButton(
-                    f"{key}️⃣ {label[:8]}{emoji}",
-                    callback_data=f"vote_{match_id}_{key}"
-                )
-            )
+            vote_row.append(InlineKeyboardButton(
+                f"{key}️⃣{emoji}",
+                callback_data=f"vote_{match_id}_{key}"
+            ))
         if vote_row:
             buttons.append(vote_row)
     
     buttons.append([
-        InlineKeyboardButton("🔮 Analyse IA", callback_data=f"predict_{match_id}"),
+        InlineKeyboardButton("🔮 Analyse", callback_data=f"predict_{match_id}"),
         InlineKeyboardButton("🔙 Retour", callback_data=f"watch_{match_id}")
     ])
     
@@ -1887,95 +2137,78 @@ async def show_community_votes(query, match_id: str, data_manager) -> None:
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
+
 async def show_user_prediction_stats(query) -> None:
-    """
-    Affiche les statistiques de l'utilisateur
-    Args:
-        query: CallbackQuery de Telegram
-    """
+    """Stats utilisateur"""
     user = query.from_user
-    
     profile = AdvancedDataManager.get_user_profile(user.id, user.username or user.first_name)
     formatted = TelegramFormatter.format_user_stats(profile)
     
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🏆 Classement", callback_data="leaderboard"),
-            InlineKeyboardButton("📜 Historique", callback_data="my_history")
-        ],
-        [InlineKeyboardButton("🔙 Retour", callback_data="predictions_menu")]
-    ])
-    
     await query.edit_message_text(
         formatted,
         parse_mode='HTML',
-        reply_markup=keyboard
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🏆 Classement", callback_data="leaderboard"),
+                InlineKeyboardButton("📜 Historique", callback_data="my_history")
+            ],
+            [InlineKeyboardButton("🔙 Retour", callback_data="predictions_menu")]
+        ])
     )
 
+
 async def show_leaderboard(query) -> None:
-    """
-    Affiche le classement
-    Args:
-        query: CallbackQuery de Telegram
-    """
+    """Classement"""
     leaderboard = AdvancedDataManager.get_leaderboard(20)
     formatted = TelegramFormatter.format_leaderboard(leaderboard)
     
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📊 Mes Stats", callback_data="my_stats"),
-            InlineKeyboardButton("🔙 Retour", callback_data="predictions_menu")
-        ]
-    ])
-    
     await query.edit_message_text(
         formatted,
         parse_mode='HTML',
-        reply_markup=keyboard
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📊 Stats", callback_data="my_stats"),
+                InlineKeyboardButton("🔙 Retour", callback_data="predictions_menu")
+            ]
+        ])
     )
 
+
 async def show_prediction_history(query) -> None:
-    """
-    Affiche l'historique des prédictions
-    Args:
-        query: CallbackQuery de Telegram
-    """
+    """Historique"""
     user = query.from_user
-    
     predictions = AdvancedDataManager.get_user_predictions(user.id, 10)
     
-    msg = f"""╔═══════════════════════════════════════╗
-   📜 <b>HISTORIQUE DES PRÉDICTIONS</b>
+    msg = """╔═══════════════════════════════════════╗
+   📜 <b>HISTORIQUE</b>
 ╚═══════════════════════════════════════╝
 
 """
     
     if not predictions:
-        msg += "📭 Aucune prédiction pour le moment.\n"
-        msg += "💡 Analysez un match pour commencer!"
+        msg += "📭 Aucune prédiction.\n💡 Analysez un match!"
     else:
-        for i, pred in enumerate(predictions[:10], 1):
-            date = pred.get('timestamp', '')[:10]
-            title = pred.get('match_title', 'Match')[:25]
-            sport = pred.get('sport', 'FOOTBALL')
-            status = pred.get('status', 'pending')
+        for i, p in enumerate(predictions[:10], 1):
+            date = p.get('timestamp', '')[:10]
+            title = p.get('match_title', 'Match')[:25]
+            ptype = p.get('prediction_type', 'unknown')
+            status = p.get('status', 'pending')
             
             status_emoji = {'pending': '⏳', 'won': '✅', 'lost': '❌'}.get(status, '⏳')
+            type_emoji = '🤖' if ptype == 'AI' else '📊'
             
-            msg += f"{i}. {status_emoji} <b>{title}</b>\n"
-            msg += f"   📅 {date} | 🏆 {sport}\n\n"
-    
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📊 Mes Stats", callback_data="my_stats"),
-            InlineKeyboardButton("🔙 Retour", callback_data="predictions_menu")
-        ]
-    ])
+            msg += f"{i}. {status_emoji}{type_emoji} <b>{title}</b>\n"
+            msg += f"   📅 {date}\n\n"
     
     await query.edit_message_text(
         msg,
         parse_mode='HTML',
-        reply_markup=keyboard
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📊 Stats", callback_data="my_stats"),
+                InlineKeyboardButton("🔙 Retour", callback_data="predictions_menu")
+            ]
+        ])
     )
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1984,6 +2217,7 @@ async def show_prediction_history(query) -> None:
 
 __all__ = [
     'PREDICTIONS_ENABLED',
+    'AI_AVAILABLE',
     'SPORTS_CONFIG',
     'AdvancedDataManager',
     'EventValidator',

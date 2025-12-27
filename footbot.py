@@ -44,7 +44,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("footbot")
 
-# Chargement du module de prédictions (V3 > V2 > V1)
+# Chargement du module de prédictions (V4 > V3 > V2)
 try:
     from prediction_module import (
         handle_prediction_request,
@@ -56,12 +56,14 @@ try:
         PredictionsManager,
         AdvancedDataManager,
         PREDICTIONS_ENABLED,
+        AI_AVAILABLE,
         SPORTS_CONFIG,
         EventValidator
     )
-    logger.info("✅ Module prédictions V3 ULTRA chargé avec succès")
+    mode = "🤖 IA" if AI_AVAILABLE else "📊 Algorithme"
+    logger.info(f"✅ Module prédictions V4 ULTRA chargé - Mode: {mode}")
 except ImportError as e:
-    logger.warning(f"⚠️ Module prédictions V3 non disponible: {e}")
+    logger.warning(f"⚠️ Module prédictions V4 non disponible: {e}")
     
     try:
         from prediction_module_v2 import (
@@ -75,11 +77,13 @@ except ImportError as e:
             AdvancedDataManager,
             PREDICTIONS_ENABLED
         )
+        AI_AVAILABLE = False
         SPORTS_CONFIG = None
         EventValidator = None
         logger.info("✅ Module prédictions V2 chargé (fallback)")
     except ImportError as e2:
         PREDICTIONS_ENABLED = False
+        AI_AVAILABLE = False
         SPORTS_CONFIG = None
         EventValidator = None
         logger.warning(f"⚠️ Aucun module de prédictions disponible: {e2}")
@@ -1713,7 +1717,15 @@ def main():
     
     logger.info(f"👮 Admins: {ADMIN_IDS}")
     logger.info(f"📢 Canal requis: {REQUIRED_CHANNEL}")
-    logger.info(f"🔮 Prédictions IA: {'✅ Activé' if PREDICTIONS_ENABLED else '❌ Désactivé'}")
+    
+    # Afficher le mode de prédiction
+    if PREDICTIONS_ENABLED:
+        if AI_AVAILABLE:
+            logger.info("🔮 Prédictions: ✅ MODE IA (Groq)")
+        else:
+            logger.info("🔮 Prédictions: ⚠️ MODE ALGORITHME (sans clé API)")
+    else:
+        logger.info("🔮 Prédictions: ❌ Désactivé")
     
     # Créer l'application
     application = Application.builder().token(BOT_TOKEN).build()
