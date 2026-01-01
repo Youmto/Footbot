@@ -26,17 +26,19 @@ from enum import Enum
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+# Définir le logger EN PREMIER
+logger = logging.getLogger("footbot.predictions")
+
 # Import du collecteur de données
 try:
     from data_collector import DataCollector, CollectedData
     DATA_COLLECTOR_AVAILABLE = True
     logger.info("✅ DataCollector importé avec succès")
-except ImportError:
+except ImportError as e:
     DATA_COLLECTOR_AVAILABLE = False
     DataCollector = None
     CollectedData = None
-
-logger = logging.getLogger("footbot.predictions")
+    logger.warning(f"⚠️ DataCollector non disponible: {e}")
 
 # ════════════════════════════════════════════════════════════════════════════
 # ⚙️ CONFIGURATION
