@@ -1,12 +1,12 @@
 """
-🔮 MODULE PRONOSTICS ULTRA V4.0 - MULTI-SPORTS PROFESSIONNEL
+🔮 MODULE PRONOSTICS ULTRA V5.0 - DATA-DRIVEN PREDICTIONS
 ═══════════════════════════════════════════════════════════════════════════════
-Version Top 1 Mondial avec:
-- Signalement clair IA vs Fallback (bannière visible)
-- Pronostics COMPLETS (cartons, corners, fautes, compositions, etc.)
-- Validation avancée des événements réels
+Version ULTIME avec:
+- Collecte de données multi-sources (Sofascore, Flashscore, Cotes)
+- L'IA analyse les données RÉELLES et génère ses propres prédictions
+- Signalement clair IA vs Fallback
+- Pronostics COMPLETS basés sur les données
 - Support de 15+ sports
-- Gamification complète
 ═══════════════════════════════════════════════════════════════════════════════
 """
 import asyncio
@@ -25,6 +25,16 @@ from dataclasses import dataclass, asdict, field
 from enum import Enum
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+# Import du collecteur de données
+try:
+    from data_collector import DataCollector, CollectedData
+    DATA_COLLECTOR_AVAILABLE = True
+    logger.info("✅ DataCollector importé avec succès")
+except ImportError:
+    DATA_COLLECTOR_AVAILABLE = False
+    DataCollector = None
+    CollectedData = None
 
 logger = logging.getLogger("footbot.predictions")
 
@@ -1122,6 +1132,156 @@ FORMAT JSON:
 }"""
 
 
+def get_data_driven_prompt() -> str:
+    """
+    Prompt LIBRE pour l'analyse basée sur les données collectées.
+    L'IA génère SES PROPRES prédictions sans format imposé.
+    """
+    return """Tu es un ANALYSTE SPORTIF PROFESSIONNEL expert en pronostics.
+
+🎯 MISSION:
+Tu reçois des DONNÉES RÉELLES collectées depuis Sofascore, API-Football, et les bookmakers.
+Analyse-les et génère TES PROPRES PRÉDICTIONS.
+
+📊 CE QUE TU DOIS FAIRE:
+1. ANALYSE les statistiques (forme, buts, cartons, corners, fautes, etc.)
+2. ÉTUDIE le H2H (confrontations directes)
+3. COMPARE avec les cotes (probabilités implicites)
+4. IDENTIFIE les VALUE BETS (où ta probabilité > celle du bookmaker)
+
+⚠️ RÈGLES:
+- LIBERTÉ TOTALE sur les marchés à prédire
+- Base-toi UNIQUEMENT sur les données fournies
+- Justifie CHAQUE prédiction avec les données
+- Confiance max 70%
+- Indique clairement les données manquantes
+
+📋 FORMAT JSON (adapte selon les données disponibles):
+{
+  "analysis": {
+    "data_quality": "Excellent/Bon/Moyen/Faible",
+    "key_observations": ["obs1", "obs2", "obs3"],
+    "team1_analysis": "Analyse de l'équipe 1...",
+    "team2_analysis": "Analyse de l'équipe 2..."
+  },
+  
+  "predictions": {
+    // AJOUTE TOUS LES MARCHÉS PERTINENTS:
+    
+    "result": {
+      "prediction": "1/X/2",
+      "probabilities": {"1": X, "X": X, "2": X},
+      "confidence": X,
+      "reasoning": "Justification..."
+    },
+    
+    "score": {
+      "prediction": "2-1",
+      "alternatives": ["1-1", "2-0"],
+      "confidence": X
+    },
+    
+    "goals": {
+      "expected": 2.7,
+      "over_1_5": {"prob": X, "recommendation": "Oui/Non"},
+      "over_2_5": {"prob": X, "recommendation": "Oui/Non"},
+      "over_3_5": {"prob": X},
+      "btts": {"prob": X, "recommendation": "Oui/Non"},
+      "confidence": X,
+      "reasoning": "..."
+    },
+    
+    "corners": {
+      "expected": 10.5,
+      "team1": 5.5,
+      "team2": 5.0,
+      "over_8_5": X,
+      "over_9_5": X,
+      "over_10_5": X,
+      "confidence": X,
+      "reasoning": "..."
+    },
+    
+    "cards": {
+      "yellow_expected": 4.5,
+      "team1_yellow": 2.5,
+      "team2_yellow": 2.0,
+      "over_3_5": X,
+      "over_4_5": X,
+      "red_probability": X,
+      "confidence": X,
+      "reasoning": "..."
+    },
+    
+    "fouls": {
+      "expected": 25,
+      "team1": 13,
+      "team2": 12
+    },
+    
+    "halftime": {
+      "result": "1/X/2",
+      "score": "1-0",
+      "confidence": X
+    },
+    
+    "possession": {
+      "team1": X,
+      "team2": X
+    },
+    
+    // AJOUTE D'AUTRES MARCHÉS SELON LES DONNÉES
+  },
+  
+  "lineups": {
+    "team1": {
+      "formation": "4-3-3",
+      "players": ["joueur1", "joueur2", "..."],
+      "key_player": "Nom",
+      "absents": ["blessé1", "suspendu1"]
+    },
+    "team2": { ... }
+  },
+  
+  "value_bets": [
+    {
+      "market": "Over 2.5 buts",
+      "selection": "Over 2.5",
+      "bookmaker_odds": 1.85,
+      "my_probability": 58,
+      "implied_probability": 54,
+      "value": "+4%",
+      "confidence": 55,
+      "reasoning": "Les stats montrent..."
+    }
+  ],
+  
+  "best_bet": {
+    "selection": "Le pari le plus sûr",
+    "odds": X,
+    "confidence": X,
+    "stake": "2% bankroll",
+    "reasoning": "..."
+  },
+  
+  "summary": {
+    "confidence": X,
+    "grade": "A/B/C",
+    "main_prediction": "Résumé en 1 phrase",
+    "key_insight": "L'insight principal",
+    "recommendation": "Conseil au parieur"
+  },
+  
+  "disclaimer": "⚠️ Pariez responsablement"
+}
+
+🔥 IMPORTANT:
+- N'invente PAS de données - utilise UNIQUEMENT ce qui est fourni
+- Si une stat manque, DIS-LE
+- Les VALUE BETS sont les paris où TU estimes une meilleure probabilité que le bookmaker
+- Sois PRÉCIS et JUSTIFIE tout avec les données"""
+
+
 def get_sport_prompt(sport: str) -> str:
     """Retourne le prompt adapté au sport"""
     base = """Tu es un analyste sportif professionnel d'élite.
@@ -1148,7 +1308,7 @@ RÈGLES STRICTES:
         return base + get_generic_prompt()
 
 # ════════════════════════════════════════════════════════════════════════════
-# 🤖 PRÉDICTEUR IA ULTRA V4
+# 🤖 PRÉDICTEUR IA ULTRA V5
 # ════════════════════════════════════════════════════════════════════════════
 
 class UltraPredictor:
@@ -1223,7 +1383,7 @@ class UltraPredictor:
         return None
     
     async def analyze_match(self, match: Dict, user_id: int) -> Dict:
-        """Analyse complète avec signalement du type de prédiction"""
+        """Analyse complète avec collecte de données multi-sources"""
         
         # Valider l'événement
         is_valid, msg, validation_score = EventValidator.validate_event(match)
@@ -1232,7 +1392,7 @@ class UltraPredictor:
             return self._generate_invalid_response(match, msg)
         
         # Vérifier le cache
-        cache_key = f"v4_{match['id']}"
+        cache_key = f"v5_{match['id']}"
         cached = AdvancedDataManager.get_prediction_cache(cache_key)
         if cached:
             self.stats['cache_hits'] += 1
@@ -1241,17 +1401,47 @@ class UltraPredictor:
         sport = match.get('sport', 'FOOTBALL').lower()
         sport_config = SPORTS_CONFIG.get(sport, SPORTS_CONFIG['other'])
         
-        # Tenter l'analyse IA
+        # === ÉTAPE 1: COLLECTER LES DONNÉES ===
+        collected_data = None
+        collected_data_text = ""
+        
+        if DATA_COLLECTOR_AVAILABLE:
+            try:
+                logger.info(f"📊 Collecte des données pour: {match.get('title', 'Match')[:40]}")
+                async with DataCollector() as collector:
+                    collected_data = await collector.collect_match_data(match)
+                    collected_data_text = collector.format_for_ai(collected_data)
+                    logger.info(f"✅ Données collectées: {collected_data.data_quality_score}% qualité")
+            except Exception as e:
+                logger.error(f"❌ Erreur collecte données: {e}")
+                collected_data_text = ""
+        
+        # === ÉTAPE 2: ANALYSE IA AVEC LES DONNÉES ===
         prediction = None
         if self.api_key:
-            prediction = await self._get_ai_prediction(match, sport)
+            if collected_data_text:
+                # Mode DATA-DRIVEN: l'IA reçoit les données réelles
+                prediction = await self._get_data_driven_prediction(match, sport, collected_data_text)
+            else:
+                # Mode classique: l'IA génère sans données externes
+                prediction = await self._get_ai_prediction(match, sport)
         
         if prediction:
             # Prédiction IA réussie
             self.stats['ai_predictions'] += 1
+            
+            # Ajouter les infos sur les sources de données
+            if collected_data:
+                prediction['data_sources'] = {
+                    'sources_used': collected_data.sources_used,
+                    'data_quality': collected_data.data_quality_score,
+                    'collection_time': collected_data.collection_time
+                }
+            
             prediction = self._finalize_prediction(
                 prediction, match, sport_config, validation_score,
-                is_ai=True
+                is_ai=True,
+                data_quality=collected_data.data_quality_score if collected_data else 0
             )
         else:
             # Fallback algorithmique
@@ -1269,8 +1459,69 @@ class UltraPredictor:
         
         return prediction
     
+    async def _get_data_driven_prediction(self, match: Dict, sport: str, data_text: str) -> Optional[Dict]:
+        """
+        Obtient une prédiction de l'IA basée sur les données collectées.
+        L'IA reçoit toutes les données et génère ses propres prédictions librement.
+        """
+        system_prompt = get_data_driven_prompt()
+        
+        team1 = match.get('team1', match.get('title', 'Équipe 1'))
+        team2 = match.get('team2', 'Équipe 2')
+        
+        user_prompt = f"""🎯 ANALYSE DATA-DRIVEN DEMANDÉE
+
+📋 MATCH: {team1} vs {team2}
+🏆 SPORT: {sport.upper()}
+⏰ HEURE: {match.get('start_time', 'N/A')}
+📅 DATE: {datetime.now().strftime('%d/%m/%Y')}
+
+════════════════════════════════════════════════════════════════════════════
+📊 DONNÉES COLLECTÉES (SOURCES RÉELLES)
+════════════════════════════════════════════════════════════════════════════
+
+{data_text}
+
+════════════════════════════════════════════════════════════════════════════
+🎯 MISSION
+════════════════════════════════════════════════════════════════════════════
+
+Analyse TOUTES ces données et génère TES PROPRES PRÉDICTIONS.
+- Base-toi UNIQUEMENT sur les données fournies
+- Sois précis et justifie chaque prédiction avec les données
+- Identifie les VALUE BETS (où la probabilité réelle > probabilité des cotes)
+- Retourne un JSON complet avec toutes tes analyses
+
+Réponds UNIQUEMENT avec un JSON valide, pas de texte avant ou après."""
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        logger.info(f"🤖 Envoi à l'IA avec {len(data_text)} caractères de données")
+        
+        response = await self._call_groq(messages)
+        
+        if response:
+            try:
+                # Nettoyer la réponse
+                response = response.strip()
+                if response.startswith("```"):
+                    response = response.split("```")[1]
+                    if response.startswith("json"):
+                        response = response[4:]
+                
+                result = json.loads(response.strip())
+                logger.info("✅ Prédiction data-driven générée avec succès")
+                return result
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Erreur parsing JSON: {e}")
+        
+        return None
+    
     async def _get_ai_prediction(self, match: Dict, sport: str) -> Optional[Dict]:
-        """Obtient une prédiction de l'IA"""
+        """Obtient une prédiction de l'IA (mode classique sans données externes)"""
         system_prompt = get_sport_prompt(sport)
         
         team1 = match.get('team1', match.get('title', 'Équipe 1'))
@@ -1309,15 +1560,31 @@ Fournis une analyse COMPLÈTE au format JSON avec TOUS les pronostics demandés.
     
     def _finalize_prediction(self, prediction: Dict, match: Dict, 
                             sport_config: Dict, validation_score: int,
-                            is_ai: bool) -> Dict:
+                            is_ai: bool, data_quality: int = 0) -> Dict:
         """Finalise la prédiction avec métadonnées"""
         
         summary = prediction.get('summary', {})
-        confidence = summary.get('confidence', 50)
+        confidence = summary.get('confidence', summary.get('overall_confidence', 50))
         
-        # Calculer le grade final
-        final_score = int(confidence * 0.7 + validation_score * 0.3)
+        # Calculer le grade final (incluant la qualité des données)
+        if data_quality > 0:
+            # Mode data-driven: pondérer avec la qualité des données
+            final_score = int(confidence * 0.5 + validation_score * 0.2 + data_quality * 0.3)
+        else:
+            final_score = int(confidence * 0.7 + validation_score * 0.3)
+        
         grade = EventValidator.get_grade(final_score)
+        
+        # Déterminer le type de prédiction
+        if is_ai and data_quality > 0:
+            prediction_type = 'DATA-DRIVEN'
+            data_quality_label = 'Excellent' if data_quality >= 70 else 'Bon' if data_quality >= 40 else 'Limité'
+        elif is_ai:
+            prediction_type = 'AI'
+            data_quality_label = 'Bon (sans données externes)'
+        else:
+            prediction_type = 'ALGORITHMIC'
+            data_quality_label = 'Limité (Algorithme)'
         
         prediction['meta'] = {
             'match_id': match.get('id'),
@@ -1328,17 +1595,19 @@ Fournis une analyse COMPLÈTE au format JSON avec TOUS les pronostics demandés.
             'sport_name': sport_config['name'],
             'sport_icon': sport_config['icon'],
             'analyzed_at': datetime.now().isoformat(),
-            'prediction_type': 'AI' if is_ai else 'ALGORITHMIC',
-            'model': GROQ_MODELS[self.current_model_index] if is_ai else 'Algorithm V4',
+            'prediction_type': prediction_type,
+            'model': GROQ_MODELS[self.current_model_index] if is_ai else 'Algorithm V5',
             'validation_score': validation_score,
-            'is_ai': is_ai
+            'data_quality_score': data_quality,
+            'is_ai': is_ai,
+            'is_data_driven': data_quality > 0
         }
         
         prediction['summary'] = {
             **summary,
             'grade': grade,
             'confidence': final_score,
-            'data_quality': 'Excellent' if is_ai else 'Bon'
+            'data_quality': data_quality_label
         }
         
         if 'disclaimer' not in prediction:
@@ -1546,18 +1815,30 @@ class TelegramFormatter:
             return TelegramFormatter._format_error(prediction)
         
         meta = prediction.get('meta', {})
-        analysis = prediction.get('analysis', {})
+        analysis = prediction.get('analysis', prediction.get('data_analysis', {}))
         preds = prediction.get('predictions', {})
         summary = prediction.get('summary', {})
         lineups = prediction.get('lineups', {})
+        data_sources = prediction.get('data_sources', {})
+        value_bets = prediction.get('value_bets', [])
+        team_analysis = prediction.get('team_analysis', {})
         
         is_ai = meta.get('is_ai', False)
+        is_data_driven = meta.get('is_data_driven', False)
         sport_icon = meta.get('sport_icon', '🎯')
+        data_quality_score = meta.get('data_quality_score', 0)
         
         # === BANNIÈRE DE TYPE DE PRÉDICTION ===
-        if is_ai:
+        if is_data_driven:
+            sources_text = ', '.join(data_sources.get('sources_used', ['IA'])[:3])
+            type_banner = f"""╔═══════════════════════════════════════╗
+   🔬 <b>ANALYSE DATA-DRIVEN</b>
+   📊 Données: {sources_text}
+   🎯 Qualité: {data_quality_score}%
+╚═══════════════════════════════════════╝"""
+        elif is_ai:
             type_banner = """╔═══════════════════════════════════════╗
-   🤖 <b>ANALYSE IA PROFESSIONNELLE</b>
+   🤖 <b>ANALYSE IA</b>
    ✅ Générée par Intelligence Artificielle
 ╚═══════════════════════════════════════╝"""
         else:
@@ -1568,7 +1849,7 @@ class TelegramFormatter:
         
         # Grade et confiance
         grade = summary.get('grade', 'C')
-        confidence = summary.get('confidence', 45)
+        confidence = summary.get('confidence', summary.get('overall_confidence', 45))
         grade_colors = {
             'A+': '🌟', 'A': '🟢', 'B+': '🟢', 'B': '🟡', 
             'C+': '🟡', 'C': '🟠', 'D': '🔴'
@@ -1586,19 +1867,28 @@ class TelegramFormatter:
 
 """
         
-        # Analyse
-        if analysis.get('overview'):
+        # === OBSERVATIONS CLÉS (si data-driven) ===
+        if analysis.get('key_observations'):
+            msg += "📋 <b>OBSERVATIONS CLÉS</b>\n"
+            for obs in analysis['key_observations'][:4]:
+                msg += f"• {obs[:80]}\n"
+            msg += "\n"
+        elif analysis.get('overview'):
             msg += f"""📋 <b>ANALYSE</b>
 {analysis['overview'][:400]}
 
 """
+        
+        # === ANALYSE DES ÉQUIPES (si disponible) ===
+        if team_analysis:
+            msg += TelegramFormatter._format_team_analysis(team_analysis, match)
         
         # === COMPOSITIONS (si disponibles) ===
         if lineups:
             msg += TelegramFormatter._format_lineups(lineups, match)
         
         # === PRONOSTIC PRINCIPAL ===
-        winner = preds.get('winner', preds.get('match_result', {}))
+        winner = preds.get('winner', preds.get('match_result', preds.get('match_winner', {})))
         if winner:
             msg += TelegramFormatter._format_winner(winner, match)
         
@@ -1606,26 +1896,32 @@ class TelegramFormatter:
         sport = meta.get('sport', 'football').lower()
         msg += TelegramFormatter._format_sport_predictions(preds, sport, match)
         
+        # === VALUE BETS (si data-driven) ===
+        if value_bets:
+            msg += TelegramFormatter._format_value_bets(value_bets)
+        
         # === MEILLEUR PARI ===
         best_bet = preds.get('best_bet', {})
-        if best_bet:
+        if best_bet and not value_bets:
             msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💎 <b>MEILLEUR PARI VALEUR</b>
+💎 <b>MEILLEUR PARI</b>
 
 🎯 <b>{best_bet.get('selection', 'N/A')}</b>
 💰 Cote: <b>{best_bet.get('odds', 'N/A')}</b>
 ⭐ Valeur: {best_bet.get('value_rating', '★★★☆☆')}
-📊 Confiance: <b>{best_bet.get('confidence', 0)}%</b>
 
 """
         
-        # === INSIGHT ===
-        if summary.get('key_insight'):
-            msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 <b>INSIGHT CLÉ</b>
-{summary['key_insight'][:200]}
-
-"""
+        # === INSIGHT / RECOMMANDATION ===
+        key_insight = summary.get('key_insight', summary.get('main_prediction', ''))
+        recommendation = summary.get('recommendation', '')
+        
+        if key_insight or recommendation:
+            msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            if key_insight:
+                msg += f"💡 <b>INSIGHT</b>\n{key_insight[:200]}\n\n"
+            if recommendation:
+                msg += f"🎯 <b>CONSEIL</b>\n{recommendation[:150]}\n\n"
         
         # === DISCLAIMER ===
         msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1638,6 +1934,63 @@ class TelegramFormatter:
             msg += f"🤖 <i>Analysé par IA ({meta.get('model', 'N/A')[:25]})</i>"
         else:
             msg += f"📊 <i>Analyse ALGORITHMIQUE - Pas d'IA utilisée</i>"
+        
+        return msg
+    
+    @staticmethod
+    def _format_team_analysis(team_analysis: Dict, match: Dict) -> str:
+        """Formate l'analyse des équipes"""
+        msg = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 <b>ANALYSE DES ÉQUIPES</b>
+
+"""
+        team1 = match.get('team1', 'Équipe 1')
+        team2 = match.get('team2', 'Équipe 2')
+        
+        if team_analysis.get('team1'):
+            t1 = team_analysis['team1']
+            msg += f"🔵 <b>{t1.get('name', team1)}</b>\n"
+            if t1.get('form_rating'):
+                msg += f"   📈 Forme: {t1['form_rating']}/10\n"
+            if t1.get('strengths'):
+                msg += f"   ✅ Forces: {', '.join(t1['strengths'][:2])}\n"
+            if t1.get('weaknesses'):
+                msg += f"   ❌ Faiblesses: {', '.join(t1['weaknesses'][:2])}\n"
+            msg += "\n"
+        
+        if team_analysis.get('team2'):
+            t2 = team_analysis['team2']
+            msg += f"🔴 <b>{t2.get('name', team2)}</b>\n"
+            if t2.get('form_rating'):
+                msg += f"   📈 Forme: {t2['form_rating']}/10\n"
+            if t2.get('strengths'):
+                msg += f"   ✅ Forces: {', '.join(t2['strengths'][:2])}\n"
+            if t2.get('weaknesses'):
+                msg += f"   ❌ Faiblesses: {', '.join(t2['weaknesses'][:2])}\n"
+            msg += "\n"
+        
+        return msg
+    
+    @staticmethod
+    def _format_value_bets(value_bets: List) -> str:
+        """Formate les value bets identifiés"""
+        msg = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💎 <b>VALUE BETS IDENTIFIÉS</b>
+
+"""
+        for i, bet in enumerate(value_bets[:3], 1):
+            market = bet.get('market', 'N/A')
+            selection = bet.get('selection', 'N/A')
+            odds = bet.get('odds', 'N/A')
+            value_rating = bet.get('value_rating', '★★★☆☆')
+            prob = bet.get('probability_estimated', 0)
+            
+            msg += f"{i}. <b>{market}</b>\n"
+            msg += f"   🎯 {selection}\n"
+            msg += f"   💰 Cote: {odds} | ⭐ {value_rating}\n"
+            if bet.get('reasoning'):
+                msg += f"   💡 {bet['reasoning'][:60]}...\n"
+            msg += "\n"
         
         return msg
     
@@ -1657,12 +2010,15 @@ class TelegramFormatter:
             msg += f"🔵 <b>{team1}</b>\n"
             if t1.get('formation'):
                 msg += f"   📐 Formation: {t1['formation']}\n"
-            if t1.get('starting_xi') or t1.get('starting_five'):
-                players = t1.get('starting_xi') or t1.get('starting_five', [])
+            if t1.get('starting_xi') or t1.get('starting_five') or t1.get('probable_xi'):
+                players = t1.get('starting_xi') or t1.get('starting_five') or t1.get('probable_xi', [])
                 if players:
-                    msg += f"   👤 {', '.join(players[:6])}...\n"
-            if t1.get('key_player'):
-                msg += f"   ⭐ Joueur clé: {t1['key_player']}\n"
+                    msg += f"   👤 {', '.join(str(p) for p in players[:6])}...\n"
+            if t1.get('key_player') or t1.get('key_player_to_watch'):
+                key = t1.get('key_player') or t1.get('key_player_to_watch', '')
+                msg += f"   ⭐ Joueur clé: {key}\n"
+            if t1.get('key_absences'):
+                msg += f"   🚑 Absents: {', '.join(t1['key_absences'][:2])}\n"
             msg += "\n"
         
         if lineups.get('team2'):
@@ -1670,12 +2026,15 @@ class TelegramFormatter:
             msg += f"🔴 <b>{team2}</b>\n"
             if t2.get('formation'):
                 msg += f"   📐 Formation: {t2['formation']}\n"
-            if t2.get('starting_xi') or t2.get('starting_five'):
-                players = t2.get('starting_xi') or t2.get('starting_five', [])
+            if t2.get('starting_xi') or t2.get('starting_five') or t2.get('probable_xi'):
+                players = t2.get('starting_xi') or t2.get('starting_five') or t2.get('probable_xi', [])
                 if players:
-                    msg += f"   👤 {', '.join(players[:6])}...\n"
-            if t2.get('key_player'):
-                msg += f"   ⭐ Joueur clé: {t2['key_player']}\n"
+                    msg += f"   👤 {', '.join(str(p) for p in players[:6])}...\n"
+            if t2.get('key_player') or t2.get('key_player_to_watch'):
+                key = t2.get('key_player') or t2.get('key_player_to_watch', '')
+                msg += f"   ⭐ Joueur clé: {key}\n"
+            if t2.get('key_absences'):
+                msg += f"   🚑 Absents: {', '.join(t2['key_absences'][:2])}\n"
             msg += "\n"
         
         return msg

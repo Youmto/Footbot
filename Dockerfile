@@ -69,6 +69,7 @@ COPY backup_manager.py .
 COPY footbot.py .
 COPY sexbot.py .
 COPY prediction_module.py .
+COPY data_collector.py .
 
 # Créer les répertoires de données avec les bonnes permissions
 RUN mkdir -p ${DATA_DIR}/footbot ${DATA_DIR}/sexbot ${DATA_DIR}/shared \
