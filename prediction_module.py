@@ -1337,7 +1337,7 @@ class UltraPredictor:
             await self.session.close()
     
     async def _call_groq(self, messages: List[Dict]) -> Optional[str]:
-        """Appel API Groq"""
+        """Appel API Groq avec gestion améliorée des erreurs"""
         if not self.api_key:
             return None
         
@@ -1348,17 +1348,25 @@ class UltraPredictor:
             "Content-Type": "application/json"
         }
         
+        # Limiter la taille du message utilisateur pour éviter les erreurs 400
+        user_message = messages[-1]['content'] if messages else ""
+        if len(user_message) > 25000:
+            # Tronquer si trop long
+            user_message = user_message[:25000] + "\n\n[...données tronquées pour respecter les limites...]"
+            messages[-1]['content'] = user_message
+            logger.warning(f"⚠️ Données tronquées à 25000 caractères")
+        
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": 0.2,
-            "max_tokens": 4500,
+            "temperature": 0.3,
+            "max_tokens": 4000,
             "top_p": 0.9,
             "response_format": {"type": "json_object"}
         }
         
         try:
-            async with self.session.post(GROQ_API_URL, headers=headers, json=payload) as response:
+            async with self.session.post(GROQ_API_URL, headers=headers, json=payload, timeout=60) as response:
                 if response.status == 200:
                     data = await response.json()
                     logger.info(f"✅ IA Groq [{model[:20]}] - Succès")
@@ -1369,14 +1377,32 @@ class UltraPredictor:
                     self.stats['api_errors'] += 1
                     if self.current_model_index < len(GROQ_MODELS) - 1:
                         self.current_model_index += 1
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(2)
                         return await self._call_groq(messages)
+                    else:
+                        # Tous les modèles en rate limit, attendre et réessayer
+                        logger.warning("⚠️ Tous les modèles en rate limit, attente 5s...")
+                        await asyncio.sleep(5)
+                        self.current_model_index = 0
+                        return None
+                
+                elif response.status == 400:
+                    error_text = await response.text()
+                    logger.error(f"❌ Groq API 400: {error_text[:200]}")
+                    self.stats['api_errors'] += 1
+                    # Essayer un modèle plus petit
+                    if self.current_model_index < len(GROQ_MODELS) - 1:
+                        self.current_model_index += 1
+                        return await self._call_groq(messages)
+                    return None
+                
                 else:
-                    logger.error(f"❌ Groq API: {response.status}")
+                    error_text = await response.text()
+                    logger.error(f"❌ Groq API {response.status}: {error_text[:200]}")
                     self.stats['api_errors'] += 1
         
         except asyncio.TimeoutError:
-            logger.error("⏱️ Timeout Groq API")
+            logger.error("⏱️ Timeout Groq API (60s)")
             self.stats['api_errors'] += 1
         except Exception as e:
             logger.error(f"❌ Exception Groq: {e}")
@@ -1404,16 +1430,19 @@ class UltraPredictor:
         sport_config = SPORTS_CONFIG.get(sport, SPORTS_CONFIG['other'])
         
         # === ÉTAPE 1: COLLECTER LES DONNÉES ===
-        collected_data = None
         collected_data_text = ""
+        data_quality = 0
         
         if DATA_COLLECTOR_AVAILABLE:
             try:
                 logger.info(f"📊 Collecte des données pour: {match.get('title', 'Match')[:40]}")
                 async with DataCollector() as collector:
-                    collected_data = await collector.collect_match_data(match)
-                    collected_data_text = collector.format_for_ai(collected_data)
-                    logger.info(f"✅ Données collectées: {collected_data.data_quality_score}% qualité")
+                    # collect_all_data retourne directement le texte formaté
+                    collected_data_text = await collector.collect_all_data(match)
+                    if collected_data_text:
+                        # Estimer la qualité basé sur la longueur du contenu
+                        data_quality = min(100, len(collected_data_text) // 100)
+                        logger.info(f"✅ Données collectées ({len(collected_data_text)} chars)")
             except Exception as e:
                 logger.error(f"❌ Erreur collecte données: {e}")
                 collected_data_text = ""
@@ -1422,7 +1451,7 @@ class UltraPredictor:
         prediction = None
         if self.api_key:
             if collected_data_text:
-                # Mode DATA-DRIVEN: l'IA reçoit les données réelles
+                # Mode DATA-DRIVEN: l'IA reçoit les données réelles et génère LIBREMENT
                 prediction = await self._get_data_driven_prediction(match, sport, collected_data_text)
             else:
                 # Mode classique: l'IA génère sans données externes
@@ -1432,18 +1461,10 @@ class UltraPredictor:
             # Prédiction IA réussie
             self.stats['ai_predictions'] += 1
             
-            # Ajouter les infos sur les sources de données
-            if collected_data:
-                prediction['data_sources'] = {
-                    'sources_used': collected_data.sources_used,
-                    'data_quality': collected_data.data_quality_score,
-                    'collection_time': collected_data.collection_time
-                }
-            
             prediction = self._finalize_prediction(
                 prediction, match, sport_config, validation_score,
                 is_ai=True,
-                data_quality=collected_data.data_quality_score if collected_data else 0
+                data_quality=data_quality
             )
         else:
             # Fallback algorithmique
@@ -1463,38 +1484,77 @@ class UltraPredictor:
     
     async def _get_data_driven_prediction(self, match: Dict, sport: str, data_text: str) -> Optional[Dict]:
         """
-        Obtient une prédiction de l'IA basée sur les données collectées.
-        L'IA reçoit toutes les données et génère ses propres prédictions librement.
+        L'IA reçoit les données collectées et génère SES PROPRES PRÉDICTIONS LIBREMENT.
+        Aucun format imposé - l'IA décide tout.
         """
-        system_prompt = get_data_driven_prompt()
+        team1 = match.get('team1', '')
+        team2 = match.get('team2', '')
         
-        team1 = match.get('team1', match.get('title', 'Équipe 1'))
-        team2 = match.get('team2', 'Équipe 2')
+        # Extraire du titre si nécessaire
+        if not team1 or not team2:
+            title = match.get('title', '')
+            if ' vs ' in title or ' v ' in title:
+                sep = ' vs ' if ' vs ' in title else ' v '
+                parts = title.split(sep)
+                team1 = parts[0].strip()
+                team2 = parts[1].strip() if len(parts) > 1 else ''
         
-        user_prompt = f"""🎯 ANALYSE DATA-DRIVEN DEMANDÉE
+        # Prompt LIBRE pour l'IA
+        system_prompt = """Tu es un analyste sportif expert. Tu reçois des données RÉELLES collectées depuis des sources fiables (API-Football, Sofascore, Bookmakers).
 
-📋 MATCH: {team1} vs {team2}
-🏆 SPORT: {sport.upper()}
-⏰ HEURE: {match.get('start_time', 'N/A')}
-📅 DATE: {datetime.now().strftime('%d/%m/%Y')}
+🎯 TA MISSION:
+Analyse TOUTES les données et génère TES PROPRES PRÉDICTIONS basées sur ces données.
 
-════════════════════════════════════════════════════════════════════════════
-📊 DONNÉES COLLECTÉES (SOURCES RÉELLES)
-════════════════════════════════════════════════════════════════════════════
+📋 RÈGLES:
+- Base-toi UNIQUEMENT sur les données fournies
+- Génère les prédictions pour TOUS les marchés que tu juges pertinents
+- Justifie chaque prédiction avec les données
+- Identifie les VALUE BETS (où ta probabilité estimée > probabilité implicite des cotes)
+- Confiance max 70%
+- Sois honnête si des données manquent
+
+📊 RETOURNE UN JSON AVEC TES ANALYSES (adapte selon les données):
+{
+  "analysis": {
+    "data_quality": "Excellent/Bon/Moyen/Faible",
+    "key_stats": ["stat1", "stat2", "stat3"],
+    "team1_form": "description",
+    "team2_form": "description"
+  },
+  "predictions": {
+    "winner": {"prediction": "1/X/2", "confidence": X, "reasoning": "..."},
+    "score": {"prediction": "X-X", "confidence": X},
+    "goals": {
+      "expected": X.X,
+      "over_1_5": X,
+      "over_2_5": X,
+      "over_3_5": X,
+      "btts": X,
+      "reasoning": "..."
+    },
+    "corners": {"expected": X, "over_9_5": X, "reasoning": "..."},
+    "cards": {"expected": X, "over_3_5": X, "reasoning": "..."},
+    "halftime": {"result": "1/X/2", "confidence": X}
+  },
+  "value_bets": [
+    {"market": "...", "selection": "...", "odds": X.XX, "my_probability": X, "value": "+X%", "reasoning": "..."}
+  ],
+  "best_bet": {"selection": "...", "confidence": X, "reasoning": "..."},
+  "summary": {
+    "confidence": X,
+    "grade": "A/B/C/D",
+    "main_prediction": "...",
+    "recommendation": "..."
+  }
+}
+
+⚠️ Tu peux ajouter ou retirer des champs selon les données disponibles. L'important est d'être PRÉCIS et JUSTIFIÉ."""
+        
+        user_prompt = f"""📊 DONNÉES COLLECTÉES POUR: {team1} vs {team2}
 
 {data_text}
 
-════════════════════════════════════════════════════════════════════════════
-🎯 MISSION
-════════════════════════════════════════════════════════════════════════════
-
-Analyse TOUTES ces données et génère TES PROPRES PRÉDICTIONS.
-- Base-toi UNIQUEMENT sur les données fournies
-- Sois précis et justifie chaque prédiction avec les données
-- Identifie les VALUE BETS (où la probabilité réelle > probabilité des cotes)
-- Retourne un JSON complet avec toutes tes analyses
-
-Réponds UNIQUEMENT avec un JSON valide, pas de texte avant ou après."""
+Analyse ces données et génère tes prédictions en JSON."""
         
         messages = [
             {"role": "system", "content": system_prompt},
