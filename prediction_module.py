@@ -56,13 +56,13 @@ if AI_AVAILABLE:
 else:
     logger.warning("⚠️ GROQ_API_KEY manquante - Mode Algorithme activé")
 
-# Modèles Groq
+# Modèles Groq (mis à jour janvier 2026)
 GROQ_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-70b-versatile",
-    "mixtral-8x7b-32768",
-    "llama-3.1-8b-instant",
-    "gemma2-9b-it"
+    "llama-3.3-70b-versatile",      # Principal
+    "llama-3.1-8b-instant",          # Rapide
+    "gemma2-9b-it",                  # Fallback
+    "llama3-70b-8192",               # Alternative
+    "llama3-8b-8192"                 # Dernier recours
 ]
 
 # Répertoire de données
