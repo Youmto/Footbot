@@ -557,7 +557,7 @@ class OddsCollector:
         return []
     
     async def get_odds(self, team1: str, team2: str, sport: str = 'football') -> Dict:
-        """Récupère les cotes pour un match"""
+        """Récupère les cotes pour un match - OPTIMISÉ pour économiser le quota"""
         result = {
             'source': 'The Odds API',
             'success': False,
@@ -566,37 +566,31 @@ class OddsCollector:
         }
         
         if not self.is_available:
-            result['error'] = "ODDS_API_KEY non configurée. Obtenez une clé gratuite sur https://the-odds-api.com/"
+            result['error'] = "ODDS_API_KEY non configurée"
             return result
         
         try:
-            # Essayer plusieurs clés de sport
-            sport_keys = self.SPORT_KEYS.get(sport.lower(), ['soccer_epl'])
+            # Sélectionner les ligues les plus probables (max 5 pour économiser le quota)
+            sport_keys = self.SPORT_KEYS.get(sport.lower(), ['soccer_epl'])[:5]
+            
+            team1_lower = team1.lower()
+            team2_lower = team2.lower()
             
             for sport_key in sport_keys:
                 url = f"{ODDS_API_URL}/sports/{sport_key}/odds"
                 params = {
                     'apiKey': self.api_key,
                     'regions': 'eu,uk',
-                    'markets': 'h2h,totals,spreads,btts,draw_no_bet',
-                    'oddsFormat': 'decimal',
-                    'bookmakers': 'bet365,unibet,betfair,pinnacle,williamhill,1xbet'
+                    'markets': 'h2h,totals,btts',
+                    'oddsFormat': 'decimal'
                 }
                 
                 async with self.session.get(url, params=params, timeout=15) as r:
                     self.requests_used += 1
                     result['requests_used'] += 1
                     
-                    # Log du quota restant
-                    remaining = r.headers.get('x-requests-remaining', '?')
-                    used = r.headers.get('x-requests-used', '?')
-                    logger.info(f"💰 Odds API: quota utilisé {used}, restant {remaining}")
-                    
                     if r.status == 200:
                         data = await r.json()
-                        
-                        team1_lower = team1.lower()
-                        team2_lower = team2.lower()
                         
                         for event in data:
                             home = event.get('home_team', '').lower()
@@ -610,8 +604,9 @@ class OddsCollector:
                                     'bookmakers': [b['title'] for b in event.get('bookmakers', [])],
                                     'sport_key': sport_key
                                 }
-                                logger.info(f"✅ Cotes trouvées: {event.get('home_team')} vs {event.get('away_team')}")
-                                return result
+                                remaining = r.headers.get('x-requests-remaining', '?')
+                                logger.info(f"✅ Cotes trouvées [{sport_key}]: {event.get('home_team')} vs {event.get('away_team')} (quota: {remaining})")
+                                return result  # ARRÊTER dès qu'on trouve
                             
                             if self._match_team(team2_lower, home) and self._match_team(team1_lower, away):
                                 result['success'] = True
@@ -621,7 +616,9 @@ class OddsCollector:
                                     'bookmakers': [b['title'] for b in event.get('bookmakers', [])],
                                     'sport_key': sport_key
                                 }
-                                return result
+                                remaining = r.headers.get('x-requests-remaining', '?')
+                                logger.info(f"✅ Cotes trouvées [{sport_key}]: {event.get('home_team')} vs {event.get('away_team')} (quota: {remaining})")
+                                return result  # ARRÊTER dès qu'on trouve
                     
                     elif r.status == 401:
                         result['error'] = "Clé API invalide"
@@ -630,7 +627,9 @@ class OddsCollector:
                         result['error'] = "Quota épuisé (500 req/mois)"
                         return result
             
-            result['error'] = f"Match non trouvé: {team1} vs {team2}"
+            # Log seulement si pas trouvé
+            logger.warning(f"⚠️ Odds API: Cotes non trouvées pour {team1} vs {team2}")
+            result['error'] = f"Match non trouvé dans les ligues disponibles"
             
         except Exception as e:
             logger.error(f"Odds API error: {e}")

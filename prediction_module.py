@@ -56,13 +56,13 @@ if AI_AVAILABLE:
 else:
     logger.warning("⚠️ GROQ_API_KEY manquante - Mode Algorithme activé")
 
-# Modèles Groq (mis à jour janvier 2026)
+# Modèles Groq (par ordre de qualité)
 GROQ_MODELS = [
-    "llama-3.3-70b-versatile",      # Principal
-    "llama-3.1-8b-instant",          # Rapide
-    "gemma2-9b-it",                  # Fallback
-    "llama3-70b-8192",               # Alternative
-    "llama3-8b-8192"                 # Dernier recours
+    ("llama-3.3-70b-versatile", 70),      # Meilleur - 70B paramètres
+    ("llama3-70b-8192", 70),               # Excellent - 70B 
+    ("gemma2-9b-it", 9),                   # Bon - 9B
+    ("llama-3.1-8b-instant", 8),           # Rapide - 8B
+    ("llama3-8b-8192", 8)                  # Fallback - 8B
 ]
 
 # Répertoire de données
@@ -1336,87 +1336,120 @@ class UltraPredictor:
         if self.session:
             await self.session.close()
     
-    async def _call_groq(self, messages: List[Dict], extended: bool = True) -> Optional[str]:
-        """Appel API Groq avec gestion améliorée des erreurs"""
+    async def _call_groq(self, messages: List[Dict], extended: bool = True, min_quality: int = 0) -> Optional[str]:
+        """
+        Appel API Groq avec gestion intelligente du rate limit.
+        
+        Args:
+            messages: Liste des messages pour l'API
+            extended: True pour plus de tokens
+            min_quality: Qualité minimale du modèle (0-70). Si le modèle disponible est en dessous, on attend.
+        """
         if not self.api_key:
             return None
         
-        model = GROQ_MODELS[self.current_model_index]
+        max_retries = 3
+        retry_count = 0
         
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        # Limiter la taille du message utilisateur pour éviter les erreurs 400
-        user_message = messages[-1]['content'] if messages else ""
-        if len(user_message) > 25000:
-            user_message = user_message[:25000] + "\n\n[...données tronquées pour respecter les limites...]"
-            messages[-1]['content'] = user_message
-            logger.warning(f"⚠️ Données tronquées à 25000 caractères")
-        
-        # Plus de tokens pour une analyse complète
-        max_tokens = 6000 if extended else 4000
-        
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.4,  # Un peu plus de créativité
-            "max_tokens": max_tokens,
-            "top_p": 0.95,
-            "response_format": {"type": "json_object"}
-        }
-        
-        try:
-            async with self.session.post(GROQ_API_URL, headers=headers, json=payload, timeout=90) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    usage = data.get('usage', {})
-                    logger.info(f"✅ IA Groq [{model[:25]}] - {usage.get('completion_tokens', '?')} tokens générés")
-                    return data['choices'][0]['message']['content']
-                
-                elif response.status == 429:
-                    logger.warning(f"⚠️ Rate limit {model} - attente 5s...")
-                    self.stats['api_errors'] += 1
+        while retry_count < max_retries:
+            model_name, model_quality = GROQ_MODELS[self.current_model_index]
+            
+            # Si on exige une qualité minimale et le modèle actuel est trop faible, on attend
+            if min_quality > 0 and model_quality < min_quality:
+                logger.warning(f"⚠️ Modèle {model_name} trop faible ({model_quality}B), attente pour meilleur modèle...")
+                await asyncio.sleep(15)  # Attendre que le rate limit se réinitialise
+                self.current_model_index = 0  # Revenir au meilleur modèle
+                retry_count += 1
+                continue
+            
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # Limiter la taille du message
+            user_message = messages[-1]['content'] if messages else ""
+            if len(user_message) > 30000:
+                user_message = user_message[:30000] + "\n\n[...données tronquées...]"
+                messages[-1]['content'] = user_message
+                logger.warning(f"⚠️ Données tronquées à 30000 caractères")
+            
+            # Plus de tokens pour les gros modèles
+            max_tokens = 8000 if extended and model_quality >= 70 else 6000 if extended else 4000
+            
+            payload = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": max_tokens,
+                "top_p": 0.95,
+                "response_format": {"type": "json_object"}
+            }
+            
+            try:
+                async with self.session.post(GROQ_API_URL, headers=headers, json=payload, timeout=120) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        usage = data.get('usage', {})
+                        tokens = usage.get('completion_tokens', 0)
+                        logger.info(f"✅ IA [{model_name}] ({model_quality}B) - {tokens} tokens")
+                        return data['choices'][0]['message']['content']
                     
-                    # Attendre plus longtemps avant de réessayer
-                    await asyncio.sleep(5)
-                    
-                    if self.current_model_index < len(GROQ_MODELS) - 1:
-                        self.current_model_index += 1
-                        logger.info(f"🔄 Passage au modèle: {GROQ_MODELS[self.current_model_index]}")
-                        return await self._call_groq(messages, extended)
-                    else:
-                        # Tous les modèles en rate limit, attendre et réessayer avec le premier
-                        logger.warning("⚠️ Tous les modèles en rate limit, attente 10s...")
-                        await asyncio.sleep(10)
-                        self.current_model_index = 0
-                        return await self._call_groq(messages, extended)
-                
-                elif response.status == 400:
-                    error_text = await response.text()
-                    logger.error(f"❌ Groq API 400: {error_text[:200]}")
-                    self.stats['api_errors'] += 1
-                    
-                    # Si modèle décommissionné, passer au suivant
-                    if "decommissioned" in error_text.lower():
+                    elif response.status == 429:
+                        retry_after = response.headers.get('retry-after', '60')
+                        try:
+                            wait_time = min(int(retry_after), 30)
+                        except:
+                            wait_time = 15
+                        
+                        logger.warning(f"⚠️ Rate limit {model_name} - attente {wait_time}s...")
+                        self.stats['api_errors'] += 1
+                        
+                        # Essayer le modèle suivant
                         if self.current_model_index < len(GROQ_MODELS) - 1:
                             self.current_model_index += 1
-                            logger.info(f"🔄 Modèle décommissionné, passage à: {GROQ_MODELS[self.current_model_index]}")
-                            return await self._call_groq(messages, extended)
-                    return None
-                
-                else:
-                    error_text = await response.text()
-                    logger.error(f"❌ Groq API {response.status}: {error_text[:200]}")
-                    self.stats['api_errors'] += 1
-        
-        except asyncio.TimeoutError:
-            logger.error("⏱️ Timeout Groq API (90s)")
-            self.stats['api_errors'] += 1
-        except Exception as e:
-            logger.error(f"❌ Exception Groq: {e}")
-            self.stats['api_errors'] += 1
+                            next_model, next_quality = GROQ_MODELS[self.current_model_index]
+                            
+                            # Si le prochain modèle est trop faible et on a pas trop réessayé, attendre
+                            if min_quality > 0 and next_quality < min_quality and retry_count < 2:
+                                logger.info(f"⏳ Attente {wait_time}s pour modèle de qualité...")
+                                await asyncio.sleep(wait_time)
+                                self.current_model_index = 0  # Revenir au meilleur
+                                retry_count += 1
+                                continue
+                            
+                            logger.info(f"🔄 Passage au modèle: {next_model} ({next_quality}B)")
+                            await asyncio.sleep(2)
+                            continue
+                        else:
+                            # Dernier modèle aussi en rate limit - attendre et recommencer
+                            logger.warning(f"⏳ Tous les modèles en rate limit, attente {wait_time}s...")
+                            await asyncio.sleep(wait_time)
+                            self.current_model_index = 0
+                            retry_count += 1
+                            continue
+                    
+                    elif response.status == 400:
+                        error_text = await response.text()
+                        logger.error(f"❌ Groq 400: {error_text[:150]}")
+                        
+                        if "decommissioned" in error_text.lower():
+                            if self.current_model_index < len(GROQ_MODELS) - 1:
+                                self.current_model_index += 1
+                                continue
+                        return None
+                    
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"❌ Groq {response.status}: {error_text[:150]}")
+                        return None
+            
+            except asyncio.TimeoutError:
+                logger.error("⏱️ Timeout Groq (120s)")
+                retry_count += 1
+            except Exception as e:
+                logger.error(f"❌ Exception Groq: {e}")
+                retry_count += 1
         
         return None
     
@@ -1494,8 +1527,8 @@ class UltraPredictor:
     
     async def _get_data_driven_prediction(self, match: Dict, sport: str, data_text: str) -> Optional[Dict]:
         """
-        L'IA reçoit les données collectées et génère SES PROPRES PRÉDICTIONS LIBREMENT.
-        Analyse approfondie avec justifications détaillées.
+        L'IA reçoit les données collectées et génère SES PROPRES PRÉDICTIONS.
+        Analyse ULTRA-DÉTAILLÉE avec justifications complètes.
         """
         team1 = match.get('team1', '')
         team2 = match.get('team2', '')
@@ -1509,174 +1542,259 @@ class UltraPredictor:
                 team1 = parts[0].strip()
                 team2 = parts[1].strip() if len(parts) > 1 else ''
         
-        # Prompt DÉTAILLÉ pour une analyse approfondie
-        system_prompt = """Tu es un ANALYSTE SPORTIF PROFESSIONNEL avec 20 ans d'expérience dans les pronostics.
+        # Prompt ULTRA-PRO pour une analyse approfondie
+        system_prompt = """Tu es un ANALYSTE SPORTIF D'ÉLITE spécialisé dans les pronostics professionnels.
+Tu travailles pour un fonds d'investissement sportif qui mise des millions sur tes analyses.
+Chaque prédiction doit être IRRÉPROCHABLE, JUSTIFIÉE et basée sur les DONNÉES.
 
-🎯 TA MISSION:
-Tu reçois des données RÉELLES collectées depuis des sources fiables (API-Football, Sofascore, Bookmakers).
-Tu dois faire une ANALYSE APPROFONDIE et générer des prédictions DÉTAILLÉES et JUSTIFIÉES.
+══════════════════════════════════════════════════════════════════════════════
+📊 MÉTHODOLOGIE D'ANALYSE OBLIGATOIRE
+══════════════════════════════════════════════════════════════════════════════
 
-📊 MÉTHODOLOGIE D'ANALYSE (suis ces étapes):
-1. ANALYSE LA FORME: Étudie les 5 derniers matchs de chaque équipe
-2. COMPARE LES STATISTIQUES: Buts marqués/encaissés, possession, tirs, corners, cartons
-3. ÉTUDIE LE H2H: Comment ces équipes se sont comportées face à face
-4. ANALYSE LES COTES: Que disent les bookmakers? Où est la valeur?
-5. IDENTIFIE LES TENDANCES: Patterns récurrents, forces et faiblesses
-6. FORMULE TES PRÉDICTIONS: Avec des pourcentages précis et des justifications
+ÉTAPE 1 - ANALYSE DE LA FORME (obligatoire):
+• Étudie les 5-10 derniers matchs de chaque équipe
+• Calcule la série actuelle (victoires/nuls/défaites consécutifs)
+• Note la forme domicile vs extérieur
+• Identifie les tendances récentes
 
-⚠️ RÈGLES STRICTES:
-- CHAQUE prédiction doit être JUSTIFIÉE par les données
-- Donne des CHIFFRES PRÉCIS (pas de "N/A" sauf si vraiment impossible)
-- Confiance max 70% (le sport reste imprévisible)
-- Si une donnée manque, ESTIME-LA à partir des autres données
-- Sois COHÉRENT (si tu prédis 1-1, c'est un nul, pas une victoire)
+ÉTAPE 2 - ANALYSE STATISTIQUE (obligatoire):
+• Buts marqués par match (domicile/extérieur)
+• Buts encaissés par match
+• Taux de clean sheets
+• Statistiques de corners (pour/contre)
+• Statistiques de cartons (jaunes/rouges)
+• Possession moyenne
 
-📋 FORMAT JSON OBLIGATOIRE:
+ÉTAPE 3 - CONFRONTATIONS DIRECTES (obligatoire):
+• Historique des H2H sur 5-10 derniers matchs
+• Tendances dans ces matchs (buts, corners, cartons)
+• Avantage psychologique
+
+ÉTAPE 4 - ANALYSE DES COTES (obligatoire):
+• Compare les cotes des bookmakers
+• Calcule les probabilités implicites
+• Identifie les VALUE BETS (où ta probabilité > celle des bookmakers)
+• Calcule l'Expected Value pour chaque pari
+
+ÉTAPE 5 - FACTEURS CONTEXTUELS:
+• Enjeu du match (titre, maintien, coupe, etc.)
+• Blessures et suspensions
+• Fatigue (enchaînement de matchs)
+• Conditions (domicile/extérieur)
+
+══════════════════════════════════════════════════════════════════════════════
+⚠️ RÈGLES ABSOLUES
+══════════════════════════════════════════════════════════════════════════════
+
+1. JAMAIS de "N/A" - Si une donnée manque, ESTIME-LA avec les autres données
+2. TOUJOURS justifier avec des CHIFFRES précis
+3. COHÉRENCE obligatoire (score 1-1 = résultat X, pas 1)
+4. Confiance RÉALISTE (max 70%, sauf cas exceptionnel)
+5. Chaque VALUE BET doit avoir un calcul d'Expected Value
+
+══════════════════════════════════════════════════════════════════════════════
+📋 FORMAT JSON OBLIGATOIRE (remplis TOUS les champs)
+══════════════════════════════════════════════════════════════════════════════
+
 {
   "analysis": {
     "data_quality": "Excellent/Bon/Moyen/Faible",
     "key_stats": [
-      "Statistique importante 1 avec chiffres",
-      "Statistique importante 2 avec chiffres", 
-      "Statistique importante 3 avec chiffres",
-      "Statistique importante 4 avec chiffres"
+      "Liverpool marque 2.8 buts/match à domicile",
+      "Leeds encaisse 1.9 buts/match à l'extérieur",
+      "H2H: 4 des 5 derniers matchs ont eu +2.5 buts",
+      "Liverpool: 85% de matchs avec corner +9.5 à domicile"
     ],
-    "team1_analysis": "Analyse détaillée de l'équipe 1 (forme, forces, faiblesses, stats clés)",
-    "team2_analysis": "Analyse détaillée de l'équipe 2 (forme, forces, faiblesses, stats clés)",
-    "h2h_analysis": "Analyse des confrontations directes",
-    "key_factors": ["Facteur décisif 1", "Facteur décisif 2", "Facteur décisif 3"]
+    "team1_analysis": "Description détaillée avec chiffres: forme (VVVND), buts (2.1/match), clean sheets (40%), forces et faiblesses",
+    "team2_analysis": "Description détaillée avec chiffres: forme (NDVPP), buts (1.2/match), buts encaissés (1.8/match), forces et faiblesses",
+    "h2h_analysis": "Sur les 10 derniers H2H: 6V-2N-2D, moyenne 3.2 buts/match, 8 matchs avec +2.5 buts",
+    "context": "Match de FA Cup 3e tour, Liverpool aligne son équipe B, Leeds joue sa survie",
+    "key_factors": [
+      "Liverpool en série de 5 victoires à domicile",
+      "Leeds n'a pas gagné à Anfield depuis 2001",
+      "L'arbitre Oliver siffle en moyenne 4.2 cartons/match"
+    ]
   },
   
   "predictions": {
     "winner": {
-      "prediction": "1 ou X ou 2",
-      "team1_probability": 35,
-      "draw_probability": 28,
-      "team2_probability": 37,
-      "confidence": 58,
-      "reasoning": "Explication détaillée basée sur les données..."
+      "prediction": "1",
+      "team1_probability": 68,
+      "draw_probability": 18,
+      "team2_probability": 14,
+      "confidence": 65,
+      "reasoning": "Liverpool domine les stats (2.8 buts marqués vs 0.9 encaissés à domicile), Leeds en difficulté à l'extérieur (0.8 buts marqués, 2.1 encaissés). Le H2H confirme la domination de Liverpool (6V sur 10)."
     },
     "score": {
-      "prediction": "1-2",
-      "confidence": 45,
-      "alternative_scores": ["2-1", "1-1", "0-1"],
-      "reasoning": "Justification du score prédit..."
+      "prediction": "3-1",
+      "confidence": 35,
+      "alternative_scores": ["2-0", "2-1", "3-0"],
+      "reasoning": "Basé sur les moyennes: Liverpool 2.8 buts à domicile, Leeds 0.8 à l'extérieur. Score le plus probable selon le modèle statistique."
     },
     "goals": {
-      "expected_total": 2.65,
-      "over_1_5": 78,
-      "over_2_5": 55,
-      "over_3_5": 28,
-      "btts_yes": 62,
-      "first_half_goals": 1.1,
-      "confidence": 60,
-      "reasoning": "Analyse basée sur les moyennes de buts..."
+      "expected_total": 3.2,
+      "over_0_5": 98,
+      "over_1_5": 88,
+      "over_2_5": 72,
+      "over_3_5": 48,
+      "over_4_5": 25,
+      "btts_yes": 55,
+      "btts_no": 45,
+      "team1_over_1_5": 78,
+      "team2_over_0_5": 62,
+      "first_half_over_0_5": 75,
+      "confidence": 65,
+      "reasoning": "Liverpool marque 2.8 buts/match à domicile, Leeds en encaisse 2.1 à l'extérieur. Les H2H montrent une moyenne de 3.2 buts. Over 2.5 est le pari le plus sûr."
     },
     "corners": {
-      "expected_total": 10.5,
-      "team1_corners": 5.5,
-      "team2_corners": 5.0,
-      "over_8_5": 72,
-      "over_9_5": 58,
-      "over_10_5": 42,
-      "confidence": 55,
-      "reasoning": "Analyse des stats de corners..."
+      "expected_total": 11.5,
+      "team1_corners": 7.2,
+      "team2_corners": 4.3,
+      "over_7_5": 85,
+      "over_8_5": 75,
+      "over_9_5": 62,
+      "over_10_5": 48,
+      "over_11_5": 35,
+      "team1_over_5_5": 72,
+      "confidence": 58,
+      "reasoning": "Liverpool force 7.8 corners/match à domicile (top 5 EPL). Leeds concède 5.2 corners/match à l'extérieur. Total attendu: 11-12 corners."
     },
     "cards": {
-      "expected_yellow": 4.2,
-      "team1_yellow": 2.3,
-      "team2_yellow": 1.9,
-      "over_2_5": 75,
-      "over_3_5": 58,
-      "over_4_5": 38,
-      "red_card_probability": 12,
-      "confidence": 52,
-      "reasoning": "Analyse du style de jeu et de l'arbitre..."
+      "expected_yellow": 4.8,
+      "team1_yellow": 1.8,
+      "team2_yellow": 3.0,
+      "over_2_5": 82,
+      "over_3_5": 68,
+      "over_4_5": 52,
+      "over_5_5": 35,
+      "red_card_probability": 8,
+      "confidence": 55,
+      "reasoning": "Leeds est la 3e équipe la plus sanctionnée du Championship (2.4 jaunes/match). Oliver siffle en moyenne 4.2 jaunes/match. Contexte tendu = plus de cartons."
     },
     "halftime": {
-      "result": "1 ou X ou 2",
+      "result": "1",
+      "ht_team1_prob": 55,
+      "ht_draw_prob": 30,
+      "ht_team2_prob": 15,
       "score": "1-0",
-      "confidence": 48,
-      "reasoning": "Analyse des tendances de première mi-temps..."
+      "confidence": 50,
+      "reasoning": "Liverpool marque dans les 45 premières minutes dans 70% de ses matchs à domicile. Leeds encaisse tôt."
+    },
+    "both_halves": {
+      "team1_score_both": 58,
+      "team2_score_both": 35,
+      "confidence": 45
     }
   },
   
   "value_bets": [
     {
-      "market": "Nom du marché",
-      "selection": "Sélection recommandée",
-      "odds": 2.10,
-      "my_probability": 52,
-      "implied_probability": 48,
-      "value": "+4%",
-      "confidence": 55,
-      "stake": "2% bankroll",
-      "reasoning": "Justification détaillée de pourquoi c'est un value bet..."
+      "market": "Over 2.5 buts",
+      "selection": "Over 2.5",
+      "bookmaker_odds": 1.75,
+      "my_probability": 72,
+      "implied_probability": 57.1,
+      "value_percentage": 14.9,
+      "expected_value": 0.26,
+      "confidence": 65,
+      "stake_recommendation": "3% du capital",
+      "reasoning": "Ma probabilité (72%) > Probabilité implicite (57%). Expected Value = (0.72 x 0.75) - (0.28 x 1) = +0.26 unité par euro misé. VALUE BET CONFIRMÉ."
+    },
+    {
+      "market": "Corners Over 9.5",
+      "selection": "Over 9.5",
+      "bookmaker_odds": 1.85,
+      "my_probability": 62,
+      "implied_probability": 54.1,
+      "value_percentage": 7.9,
+      "expected_value": 0.15,
+      "confidence": 58,
+      "stake_recommendation": "2% du capital",
+      "reasoning": "Liverpool génère beaucoup de corners à domicile. Leeds défend bas = corners pour Liverpool."
     }
   ],
   
   "best_bet": {
-    "selection": "Le pari le plus sûr",
-    "odds": 1.85,
+    "market": "Liverpool -1 Asian Handicap",
+    "selection": "Liverpool -1",
+    "odds": 1.80,
     "confidence": 62,
-    "reasoning": "Pourquoi c'est le meilleur pari..."
+    "stake": "2-3% du capital",
+    "reasoning": "Liverpool gagne par 2+ buts dans 60% de ses matchs à domicile. Leeds encaisse en moyenne 2.1 buts à l'extérieur. Historiquement, Liverpool bat Leeds par 2+ buts dans 5 des 8 derniers H2H."
   },
   
   "risky_bet": {
-    "selection": "Pari risqué mais intéressant",
-    "odds": 4.50,
-    "confidence": 35,
-    "reasoning": "Pourquoi ça vaut le coup malgré le risque..."
+    "market": "Score exact",
+    "selection": "3-1",
+    "odds": 11.00,
+    "confidence": 25,
+    "stake": "0.5% du capital",
+    "reasoning": "Score le plus probable selon le modèle. Petit stake pour gros gain potentiel."
   },
   
+  "accumulator_tips": [
+    {"selection": "Liverpool gagne", "odds": 1.35, "confidence": 68},
+    {"selection": "Over 2.5 buts", "odds": 1.75, "confidence": 65},
+    {"selection": "Over 9.5 corners", "odds": 1.85, "confidence": 58}
+  ],
+  
   "summary": {
-    "confidence": 58,
-    "grade": "A/B/C/D",
-    "main_prediction": "Résumé clair de la prédiction principale",
-    "key_insight": "L'insight le plus important de cette analyse",
-    "recommendation": "Conseil détaillé pour le parieur",
-    "risk_level": "Faible/Moyen/Élevé"
+    "confidence": 62,
+    "grade": "A",
+    "main_prediction": "Victoire de Liverpool 3-1 avec beaucoup de corners",
+    "key_insight": "Liverpool trop fort à domicile pour ce Leeds en difficulté. Over 2.5 buts est quasi certain.",
+    "recommendation": "Parier sur Liverpool gagne + Over 2.5 en combiné (cote ~2.35). Value bet: Over 9.5 corners.",
+    "risk_level": "Moyen",
+    "bankroll_advice": "Miser 3% du capital sur le combiné principal"
   }
 }
 
-🔥 IMPORTANT:
-- Prends le temps d'analyser TOUTES les données avant de répondre
-- Sois PRÉCIS et COHÉRENT dans tes prédictions
-- Ne laisse AUCUN champ à "N/A" - fais des estimations si nécessaire
-- Justifie TOUT avec les données fournies"""
+══════════════════════════════════════════════════════════════════════════════
+🔥 RAPPEL FINAL
+══════════════════════════════════════════════════════════════════════════════
+
+- Lis TOUTES les données avant de répondre
+- CALCULE les probabilités avec précision
+- JUSTIFIE chaque prédiction avec des CHIFFRES
+- Identifie TOUS les value bets possibles
+- Sois PROFESSIONNEL et PRÉCIS"""
         
-        user_prompt = f"""📊 ANALYSE COMPLÈTE DEMANDÉE POUR:
+        user_prompt = f"""📊 ANALYSE PRO DEMANDÉE POUR:
 🏟️ {team1} vs {team2}
 🏆 Sport: {sport.upper()}
 ⏰ {match.get('start_time', 'Heure non précisée')}
 
 ══════════════════════════════════════════════════════════════════════════════
-📊 DONNÉES COLLECTÉES - ANALYSE CES INFORMATIONS EN PROFONDEUR
+📊 DONNÉES COLLECTÉES - ANALYSE EN PROFONDEUR
 ══════════════════════════════════════════════════════════════════════════════
 
 {data_text}
 
 ══════════════════════════════════════════════════════════════════════════════
-🎯 INSTRUCTIONS
+🎯 MISSION
 ══════════════════════════════════════════════════════════════════════════════
 
-1. Lis ATTENTIVEMENT toutes les données ci-dessus
-2. Analyse la FORME des deux équipes
-3. Compare les STATISTIQUES clés
-4. Identifie les TENDANCES et patterns
-5. Formule tes PRÉDICTIONS avec des chiffres précis
-6. Justifie CHAQUE prédiction avec les données
+Tu as reçu TOUTES les données disponibles. Maintenant:
+1. Analyse CHAQUE statistique
+2. Identifie les tendances et patterns
+3. Calcule tes probabilités
+4. Compare avec les cotes des bookmakers
+5. Identifie les VALUE BETS
+6. Génère un JSON COMPLET avec TOUTES tes prédictions
 
-Réponds UNIQUEMENT avec un JSON valide et COMPLET."""
+⚠️ RAPPEL: JAMAIS de "N/A" - estime si nécessaire. CHIFFRES PRÉCIS obligatoires.
+
+Réponds UNIQUEMENT avec un JSON valide."""
         
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
         
-        logger.info(f"🤖 Analyse approfondie avec {len(data_text)} caractères de données...")
+        logger.info(f"🤖 Analyse PROFESSIONNELLE avec {len(data_text)} caractères de données...")
         
-        response = await self._call_groq(messages, extended=True)
+        # Exiger un modèle de qualité minimale 9B pour une analyse sérieuse
+        response = await self._call_groq(messages, extended=True, min_quality=9)
         
         if response:
             try:
