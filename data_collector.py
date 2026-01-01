@@ -471,27 +471,63 @@ class OddsCollector:
     Inscription: https://the-odds-api.com/
     """
     
-    # Mapping des sports
+    # Mapping des sports - TOUTES les ligues disponibles
     SPORT_KEYS = {
         'football': [
-            'soccer_epl',           # Premier League
-            'soccer_france_ligue_one',  # Ligue 1
-            'soccer_spain_la_liga',     # La Liga
-            'soccer_italy_serie_a',     # Serie A
-            'soccer_germany_bundesliga', # Bundesliga
-            'soccer_uefa_champs_league', # Champions League
-            'soccer_uefa_europa_league', # Europa League
-            'soccer_fifa_world_cup',     # World Cup
+            'soccer_epl',                    # Premier League
+            'soccer_england_efl_cup',        # EFL Cup
+            'soccer_fa_cup',                 # FA Cup
+            'soccer_england_league1',        # League One
+            'soccer_england_league2',        # League Two
+            'soccer_france_ligue_one',       # Ligue 1
+            'soccer_france_ligue_two',       # Ligue 2
+            'soccer_spain_la_liga',          # La Liga
+            'soccer_spain_segunda_division', # La Liga 2
+            'soccer_italy_serie_a',          # Serie A
+            'soccer_italy_serie_b',          # Serie B
+            'soccer_germany_bundesliga',     # Bundesliga
+            'soccer_germany_bundesliga2',    # Bundesliga 2
+            'soccer_uefa_champs_league',     # Champions League
+            'soccer_uefa_europa_league',     # Europa League
+            'soccer_uefa_europa_conference_league', # Conference League
+            'soccer_netherlands_eredivisie', # Eredivisie
+            'soccer_portugal_primeira_liga', # Liga Portugal
+            'soccer_belgium_first_div',      # Belgium Pro League
+            'soccer_turkey_super_league',    # Super Lig
+            'soccer_brazil_campeonato',      # Brasileirao
+            'soccer_australia_aleague',      # A-League
+            'soccer_mexico_ligamx',          # Liga MX
+            'soccer_usa_mls',                # MLS
+            'soccer_conmebol_copa_libertadores', # Copa Libertadores
+            'soccer_fifa_world_cup',         # World Cup
+            'soccer_uefa_nations_league',    # Nations League
         ],
-        'soccer': ['soccer_epl'],
+        'soccer': [
+            'soccer_epl',
+            'soccer_fa_cup',
+            'soccer_england_efl_cup',
+        ],
         'nba': ['basketball_nba'],
-        'basketball': ['basketball_nba', 'basketball_euroleague'],
+        'basketball': [
+            'basketball_nba',
+            'basketball_euroleague',
+            'basketball_ncaab'
+        ],
         'nfl': ['americanfootball_nfl'],
-        'tennis': ['tennis_atp_aus_open', 'tennis_atp_french_open', 'tennis_atp_wimbledon'],
+        'tennis': [
+            'tennis_atp_aus_open',
+            'tennis_atp_french_open', 
+            'tennis_atp_wimbledon',
+            'tennis_atp_us_open',
+            'tennis_wta_aus_open',
+            'tennis_wta_french_open'
+        ],
         'ufc': ['mma_mixed_martial_arts'],
         'mma': ['mma_mixed_martial_arts'],
         'nhl': ['icehockey_nhl'],
-        'mlb': ['baseball_mlb']
+        'mlb': ['baseball_mlb'],
+        'rugby': ['rugbyunion_six_nations'],
+        'other': ['soccer_epl']  # Fallback
     }
     
     def __init__(self, session: aiohttp.ClientSession):

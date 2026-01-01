@@ -1336,7 +1336,7 @@ class UltraPredictor:
         if self.session:
             await self.session.close()
     
-    async def _call_groq(self, messages: List[Dict]) -> Optional[str]:
+    async def _call_groq(self, messages: List[Dict], extended: bool = True) -> Optional[str]:
         """Appel API Groq avec gestion améliorée des erreurs"""
         if not self.api_key:
             return None
@@ -1351,49 +1351,59 @@ class UltraPredictor:
         # Limiter la taille du message utilisateur pour éviter les erreurs 400
         user_message = messages[-1]['content'] if messages else ""
         if len(user_message) > 25000:
-            # Tronquer si trop long
             user_message = user_message[:25000] + "\n\n[...données tronquées pour respecter les limites...]"
             messages[-1]['content'] = user_message
             logger.warning(f"⚠️ Données tronquées à 25000 caractères")
         
+        # Plus de tokens pour une analyse complète
+        max_tokens = 6000 if extended else 4000
+        
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": 0.3,
-            "max_tokens": 4000,
-            "top_p": 0.9,
+            "temperature": 0.4,  # Un peu plus de créativité
+            "max_tokens": max_tokens,
+            "top_p": 0.95,
             "response_format": {"type": "json_object"}
         }
         
         try:
-            async with self.session.post(GROQ_API_URL, headers=headers, json=payload, timeout=60) as response:
+            async with self.session.post(GROQ_API_URL, headers=headers, json=payload, timeout=90) as response:
                 if response.status == 200:
                     data = await response.json()
-                    logger.info(f"✅ IA Groq [{model[:20]}] - Succès")
+                    usage = data.get('usage', {})
+                    logger.info(f"✅ IA Groq [{model[:25]}] - {usage.get('completion_tokens', '?')} tokens générés")
                     return data['choices'][0]['message']['content']
                 
                 elif response.status == 429:
-                    logger.warning(f"⚠️ Rate limit {model}")
+                    logger.warning(f"⚠️ Rate limit {model} - attente 5s...")
                     self.stats['api_errors'] += 1
+                    
+                    # Attendre plus longtemps avant de réessayer
+                    await asyncio.sleep(5)
+                    
                     if self.current_model_index < len(GROQ_MODELS) - 1:
                         self.current_model_index += 1
-                        await asyncio.sleep(2)
-                        return await self._call_groq(messages)
+                        logger.info(f"🔄 Passage au modèle: {GROQ_MODELS[self.current_model_index]}")
+                        return await self._call_groq(messages, extended)
                     else:
-                        # Tous les modèles en rate limit, attendre et réessayer
-                        logger.warning("⚠️ Tous les modèles en rate limit, attente 5s...")
-                        await asyncio.sleep(5)
+                        # Tous les modèles en rate limit, attendre et réessayer avec le premier
+                        logger.warning("⚠️ Tous les modèles en rate limit, attente 10s...")
+                        await asyncio.sleep(10)
                         self.current_model_index = 0
-                        return None
+                        return await self._call_groq(messages, extended)
                 
                 elif response.status == 400:
                     error_text = await response.text()
                     logger.error(f"❌ Groq API 400: {error_text[:200]}")
                     self.stats['api_errors'] += 1
-                    # Essayer un modèle plus petit
-                    if self.current_model_index < len(GROQ_MODELS) - 1:
-                        self.current_model_index += 1
-                        return await self._call_groq(messages)
+                    
+                    # Si modèle décommissionné, passer au suivant
+                    if "decommissioned" in error_text.lower():
+                        if self.current_model_index < len(GROQ_MODELS) - 1:
+                            self.current_model_index += 1
+                            logger.info(f"🔄 Modèle décommissionné, passage à: {GROQ_MODELS[self.current_model_index]}")
+                            return await self._call_groq(messages, extended)
                     return None
                 
                 else:
@@ -1402,7 +1412,7 @@ class UltraPredictor:
                     self.stats['api_errors'] += 1
         
         except asyncio.TimeoutError:
-            logger.error("⏱️ Timeout Groq API (60s)")
+            logger.error("⏱️ Timeout Groq API (90s)")
             self.stats['api_errors'] += 1
         except Exception as e:
             logger.error(f"❌ Exception Groq: {e}")
@@ -1485,7 +1495,7 @@ class UltraPredictor:
     async def _get_data_driven_prediction(self, match: Dict, sport: str, data_text: str) -> Optional[Dict]:
         """
         L'IA reçoit les données collectées et génère SES PROPRES PRÉDICTIONS LIBREMENT.
-        Aucun format imposé - l'IA décide tout.
+        Analyse approfondie avec justifications détaillées.
         """
         team1 = match.get('team1', '')
         team2 = match.get('team2', '')
@@ -1499,71 +1509,174 @@ class UltraPredictor:
                 team1 = parts[0].strip()
                 team2 = parts[1].strip() if len(parts) > 1 else ''
         
-        # Prompt LIBRE pour l'IA
-        system_prompt = """Tu es un analyste sportif expert. Tu reçois des données RÉELLES collectées depuis des sources fiables (API-Football, Sofascore, Bookmakers).
+        # Prompt DÉTAILLÉ pour une analyse approfondie
+        system_prompt = """Tu es un ANALYSTE SPORTIF PROFESSIONNEL avec 20 ans d'expérience dans les pronostics.
 
 🎯 TA MISSION:
-Analyse TOUTES les données et génère TES PROPRES PRÉDICTIONS basées sur ces données.
+Tu reçois des données RÉELLES collectées depuis des sources fiables (API-Football, Sofascore, Bookmakers).
+Tu dois faire une ANALYSE APPROFONDIE et générer des prédictions DÉTAILLÉES et JUSTIFIÉES.
 
-📋 RÈGLES:
-- Base-toi UNIQUEMENT sur les données fournies
-- Génère les prédictions pour TOUS les marchés que tu juges pertinents
-- Justifie chaque prédiction avec les données
-- Identifie les VALUE BETS (où ta probabilité estimée > probabilité implicite des cotes)
-- Confiance max 70%
-- Sois honnête si des données manquent
+📊 MÉTHODOLOGIE D'ANALYSE (suis ces étapes):
+1. ANALYSE LA FORME: Étudie les 5 derniers matchs de chaque équipe
+2. COMPARE LES STATISTIQUES: Buts marqués/encaissés, possession, tirs, corners, cartons
+3. ÉTUDIE LE H2H: Comment ces équipes se sont comportées face à face
+4. ANALYSE LES COTES: Que disent les bookmakers? Où est la valeur?
+5. IDENTIFIE LES TENDANCES: Patterns récurrents, forces et faiblesses
+6. FORMULE TES PRÉDICTIONS: Avec des pourcentages précis et des justifications
 
-📊 RETOURNE UN JSON AVEC TES ANALYSES (adapte selon les données):
+⚠️ RÈGLES STRICTES:
+- CHAQUE prédiction doit être JUSTIFIÉE par les données
+- Donne des CHIFFRES PRÉCIS (pas de "N/A" sauf si vraiment impossible)
+- Confiance max 70% (le sport reste imprévisible)
+- Si une donnée manque, ESTIME-LA à partir des autres données
+- Sois COHÉRENT (si tu prédis 1-1, c'est un nul, pas une victoire)
+
+📋 FORMAT JSON OBLIGATOIRE:
 {
   "analysis": {
     "data_quality": "Excellent/Bon/Moyen/Faible",
-    "key_stats": ["stat1", "stat2", "stat3"],
-    "team1_form": "description",
-    "team2_form": "description"
+    "key_stats": [
+      "Statistique importante 1 avec chiffres",
+      "Statistique importante 2 avec chiffres", 
+      "Statistique importante 3 avec chiffres",
+      "Statistique importante 4 avec chiffres"
+    ],
+    "team1_analysis": "Analyse détaillée de l'équipe 1 (forme, forces, faiblesses, stats clés)",
+    "team2_analysis": "Analyse détaillée de l'équipe 2 (forme, forces, faiblesses, stats clés)",
+    "h2h_analysis": "Analyse des confrontations directes",
+    "key_factors": ["Facteur décisif 1", "Facteur décisif 2", "Facteur décisif 3"]
   },
+  
   "predictions": {
-    "winner": {"prediction": "1/X/2", "confidence": X, "reasoning": "..."},
-    "score": {"prediction": "X-X", "confidence": X},
-    "goals": {
-      "expected": X.X,
-      "over_1_5": X,
-      "over_2_5": X,
-      "over_3_5": X,
-      "btts": X,
-      "reasoning": "..."
+    "winner": {
+      "prediction": "1 ou X ou 2",
+      "team1_probability": 35,
+      "draw_probability": 28,
+      "team2_probability": 37,
+      "confidence": 58,
+      "reasoning": "Explication détaillée basée sur les données..."
     },
-    "corners": {"expected": X, "over_9_5": X, "reasoning": "..."},
-    "cards": {"expected": X, "over_3_5": X, "reasoning": "..."},
-    "halftime": {"result": "1/X/2", "confidence": X}
+    "score": {
+      "prediction": "1-2",
+      "confidence": 45,
+      "alternative_scores": ["2-1", "1-1", "0-1"],
+      "reasoning": "Justification du score prédit..."
+    },
+    "goals": {
+      "expected_total": 2.65,
+      "over_1_5": 78,
+      "over_2_5": 55,
+      "over_3_5": 28,
+      "btts_yes": 62,
+      "first_half_goals": 1.1,
+      "confidence": 60,
+      "reasoning": "Analyse basée sur les moyennes de buts..."
+    },
+    "corners": {
+      "expected_total": 10.5,
+      "team1_corners": 5.5,
+      "team2_corners": 5.0,
+      "over_8_5": 72,
+      "over_9_5": 58,
+      "over_10_5": 42,
+      "confidence": 55,
+      "reasoning": "Analyse des stats de corners..."
+    },
+    "cards": {
+      "expected_yellow": 4.2,
+      "team1_yellow": 2.3,
+      "team2_yellow": 1.9,
+      "over_2_5": 75,
+      "over_3_5": 58,
+      "over_4_5": 38,
+      "red_card_probability": 12,
+      "confidence": 52,
+      "reasoning": "Analyse du style de jeu et de l'arbitre..."
+    },
+    "halftime": {
+      "result": "1 ou X ou 2",
+      "score": "1-0",
+      "confidence": 48,
+      "reasoning": "Analyse des tendances de première mi-temps..."
+    }
   },
+  
   "value_bets": [
-    {"market": "...", "selection": "...", "odds": X.XX, "my_probability": X, "value": "+X%", "reasoning": "..."}
+    {
+      "market": "Nom du marché",
+      "selection": "Sélection recommandée",
+      "odds": 2.10,
+      "my_probability": 52,
+      "implied_probability": 48,
+      "value": "+4%",
+      "confidence": 55,
+      "stake": "2% bankroll",
+      "reasoning": "Justification détaillée de pourquoi c'est un value bet..."
+    }
   ],
-  "best_bet": {"selection": "...", "confidence": X, "reasoning": "..."},
+  
+  "best_bet": {
+    "selection": "Le pari le plus sûr",
+    "odds": 1.85,
+    "confidence": 62,
+    "reasoning": "Pourquoi c'est le meilleur pari..."
+  },
+  
+  "risky_bet": {
+    "selection": "Pari risqué mais intéressant",
+    "odds": 4.50,
+    "confidence": 35,
+    "reasoning": "Pourquoi ça vaut le coup malgré le risque..."
+  },
+  
   "summary": {
-    "confidence": X,
+    "confidence": 58,
     "grade": "A/B/C/D",
-    "main_prediction": "...",
-    "recommendation": "..."
+    "main_prediction": "Résumé clair de la prédiction principale",
+    "key_insight": "L'insight le plus important de cette analyse",
+    "recommendation": "Conseil détaillé pour le parieur",
+    "risk_level": "Faible/Moyen/Élevé"
   }
 }
 
-⚠️ Tu peux ajouter ou retirer des champs selon les données disponibles. L'important est d'être PRÉCIS et JUSTIFIÉ."""
+🔥 IMPORTANT:
+- Prends le temps d'analyser TOUTES les données avant de répondre
+- Sois PRÉCIS et COHÉRENT dans tes prédictions
+- Ne laisse AUCUN champ à "N/A" - fais des estimations si nécessaire
+- Justifie TOUT avec les données fournies"""
         
-        user_prompt = f"""📊 DONNÉES COLLECTÉES POUR: {team1} vs {team2}
+        user_prompt = f"""📊 ANALYSE COMPLÈTE DEMANDÉE POUR:
+🏟️ {team1} vs {team2}
+🏆 Sport: {sport.upper()}
+⏰ {match.get('start_time', 'Heure non précisée')}
+
+══════════════════════════════════════════════════════════════════════════════
+📊 DONNÉES COLLECTÉES - ANALYSE CES INFORMATIONS EN PROFONDEUR
+══════════════════════════════════════════════════════════════════════════════
 
 {data_text}
 
-Analyse ces données et génère tes prédictions en JSON."""
+══════════════════════════════════════════════════════════════════════════════
+🎯 INSTRUCTIONS
+══════════════════════════════════════════════════════════════════════════════
+
+1. Lis ATTENTIVEMENT toutes les données ci-dessus
+2. Analyse la FORME des deux équipes
+3. Compare les STATISTIQUES clés
+4. Identifie les TENDANCES et patterns
+5. Formule tes PRÉDICTIONS avec des chiffres précis
+6. Justifie CHAQUE prédiction avec les données
+
+Réponds UNIQUEMENT avec un JSON valide et COMPLET."""
         
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
         
-        logger.info(f"🤖 Envoi à l'IA avec {len(data_text)} caractères de données")
+        logger.info(f"🤖 Analyse approfondie avec {len(data_text)} caractères de données...")
         
-        response = await self._call_groq(messages)
+        response = await self._call_groq(messages, extended=True)
         
         if response:
             try:
